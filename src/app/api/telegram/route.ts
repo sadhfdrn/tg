@@ -12,7 +12,7 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
 interface UserState {
-    step: 'idle' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete';
+    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
@@ -57,11 +57,22 @@ async function sendMessage(chatId: string | number, text: string, reply_markup?:
 function getMainMenuKeyboard() {
     return {
         keyboard: [
-            [{ text: '📥 Download Video' }, { text: '🎨 Manage Presets' }]
+            [{ text: '🎶 TikTok' }],
         ],
         resize_keyboard: true,
         one_time_keyboard: false
     };
+}
+
+function getTikTokMenuKeyboard() {
+    return {
+         keyboard: [
+            [{ text: '📥 Download Video' }, { text: '🎨 Manage Presets' }],
+            [{ text: '🔙 Back to Main Menu'}]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    }
 }
 
 function getManagePresetsKeyboard() {
@@ -74,7 +85,6 @@ function getManagePresetsKeyboard() {
         one_time_keyboard: true
     };
 }
-
 
 function getCancelKeyboard() {
     return {
@@ -181,6 +191,26 @@ async function processIncomingMessage(chatId: string, text: string) {
                 await sendMessage(chatId, "That doesn't look like a valid TikTok URL. Please try again or cancel.", getCancelKeyboard());
             }
             return;
+        
+        case 'awaiting_main_menu_choice':
+             if (trimmedText === '📥 Download Video') {
+                state.step = 'awaiting_url';
+                await sendMessage(chatId, "Please send me the TikTok URL you'd like to download.", getCancelKeyboard());
+            } else if (trimmedText === '🎨 Manage Presets') {
+                state.step = 'awaiting_preset_management_action';
+                const presetNames = Object.keys(state.presets);
+                let message = "You can create a new preset or delete an existing one.\n";
+                if (presetNames.length > 0) {
+                    message += `\nYour current presets:\n- ${presetNames.join('\n- ')}`;
+                } else {
+                    message += "\nYou don't have any presets saved yet.";
+                }
+                await sendMessage(chatId, message, getManagePresetsKeyboard());
+            } else {
+                await sendMessage(chatId, 'Please choose an option from the keyboard.', getTikTokMenuKeyboard());
+            }
+            return;
+
 
         case 'awaiting_download_option':
             const preset = state.presets[trimmedText];
@@ -213,7 +243,7 @@ async function processIncomingMessage(chatId: string, text: string) {
                 const presetNames = Object.keys(state.presets);
                 if (presetNames.length === 0) {
                      await sendMessage(chatId, "You don't have any presets to delete.", getManagePresetsKeyboard());
-                     state.step = 'idle'; // Back to main if no presets
+                     state.step = 'awaiting_main_menu_choice';
                 } else {
                     state.step = 'awaiting_preset_to_delete';
                     await sendMessage(chatId, 'Which preset would you like to delete?', getDeletePresetKeyboard(state));
@@ -296,22 +326,9 @@ async function processIncomingMessage(chatId: string, text: string) {
         return;
     }
 
-    if (trimmedText === '📥 Download Video') {
-        state.step = 'awaiting_url';
-        await sendMessage(chatId, "Please send me the TikTok URL you'd like to download.", getCancelKeyboard());
-        return;
-    }
-    
-    if (trimmedText === '🎨 Manage Presets') {
-        state.step = 'awaiting_preset_management_action';
-        const presetNames = Object.keys(state.presets);
-        let message = "You can create a new preset or delete an existing one.\n";
-        if (presetNames.length > 0) {
-            message += `\nYour current presets:\n- ${presetNames.join('\n- ')}`;
-        } else {
-            message += "\nYou don't have any presets saved yet.";
-        }
-        await sendMessage(chatId, message, getManagePresetsKeyboard());
+    if (trimmedText === '🎶 TikTok') {
+        state.step = 'awaiting_main_menu_choice';
+        await sendMessage(chatId, 'What would you like to do?', getTikTokMenuKeyboard());
         return;
     }
     
@@ -341,6 +358,7 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
 
         if (response.text && (!response.media || response.media.length === 0)) {
             await sendMessage(chatId, response.text, getMainMenuKeyboard());
+            return;
         }
 
         if (response.media && response.media.length > 0) {
@@ -373,7 +391,7 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
             console.error("Telegram API Error Response:", error.response.data);
             await sendMessage(chatId, `Failed to send media: ${error.response.data.description}`, getMainMenuKeyboard());
         } else {
-            await sendMessage(chatId, "An unexpected error occurred while sending your file. It might be too large.", getMainMenuKeyboard());
+            await sendMessage(chatId, "An unexpected error occurred while sending your file. It might be too large or processing failed.", getMainMenuKeyboard());
         }
     }
 }
@@ -397,7 +415,8 @@ export async function POST(request: Request) {
              console.log("Update is not a standard text message, skipping.");
         }
 
-    } catch (error: any) {
+    } catch (error: any)
+{
         console.error("Error processing webhook:", error.message);
         if (axios.isAxiosError(error) && error.response) {
             console.error("Telegram API Error Response:", error.response.data);
@@ -406,5 +425,3 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: 'ok' });
 }
-
-    

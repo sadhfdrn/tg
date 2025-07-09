@@ -192,9 +192,14 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
     await promisify(exec)('ffmpeg -version').catch(() => { throw new Error('FFmpeg not found! Please install FFmpeg.') });
     
     const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
-    const pngBuffer = await sharp(svgBuffer).png().toBuffer();
     const watermarkPngPath = path.join(tempDir, `watermark_${Date.now()}.png`);
-    await fs.promises.writeFile(watermarkPngPath, pngBuffer);
+    
+    try {
+        await sharp(svgBuffer).png().toFile(watermarkPngPath);
+    } catch(err) {
+        console.error("Sharp PNG conversion failed:", err);
+        throw new Error(`Failed to convert watermark SVG to PNG: ${(err as Error).message}`);
+    }
     
     const overlayCommand = getFfmpegOverlay(watermarkPosition);
 
@@ -205,11 +210,12 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
             .outputOptions(['-c:v libx264', '-preset fast', '-crf 23', '-c:a copy'])
             .output(outputPath)
             .on('end', () => {
-                try { fs.unlinkSync(watermarkPngPath); } catch (e) {}
+                try { fs.unlinkSync(watermarkPngPath); } catch (e) { console.error("Could not clean up watermark png", e) }
                 resolve(outputPath);
             })
             .on('error', (err) => {
-                try { fs.unlinkSync(watermarkPngPath); } catch (e) {}
+                try { fs.unlinkSync(watermarkPngPath); } catch (e) { console.error("Could not clean up watermark png", e) }
+                console.error("FFmpeg error:", err.message);
                 reject(new Error(`FFmpeg error: ${err.message}`));
             })
             .run();
@@ -266,6 +272,8 @@ async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'im
             processedFiles.push({ path: outputPath, type: mediaFile.type, index: mediaFile.index, originalPath: mediaFile.path });
         } catch (error) {
             console.error(`Failed to process ${mediaFile.type} at ${mediaFile.path}:`, error);
+            // If watermarking fails, we throw to prevent sending a partially processed set.
+            throw error;
         }
     }
     return processedFiles;
@@ -292,15 +300,14 @@ export async function processTikTokUrl(url: string, watermarkText?: string, wate
         caption: processedFiles.length > 1 ? `${file.type.toUpperCase()} ${file.index + 1}/${processedFiles.length}` : `Watermarked ${file.type}`
     }));
 
-    processedFiles.forEach(file => {
+    // Clean up original downloaded files after successful watermarking.
+    mediaFiles.forEach(file => {
          try {
-            if (fs.existsSync(file.originalPath)) fs.unlinkSync(file.originalPath);
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
         } catch (e) {
-            console.error(`Failed to clean up original file: ${(e as Error).message}`);
+            console.error(`Failed to clean up original downloaded file: ${(e as Error).message}`);
         }
     });
 
     return results;
 }
-
-    
