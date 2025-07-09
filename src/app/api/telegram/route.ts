@@ -57,8 +57,7 @@ async function sendMessage(chatId: string | number, text: string, reply_markup?:
 function getMainMenuKeyboard() {
     return {
         keyboard: [
-            [{ text: '⬇️ Download Video' }],
-            [{ text: '🎨 Manage Presets' }]
+            [{ text: '🎶 TikTok' }]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
@@ -92,10 +91,10 @@ function getDownloadOptionsKeyboard(state: UserState) {
     };
 }
 
-function getPresetManagementKeyboard() {
+function getTiktokMenuKeyboard() {
      return {
         keyboard: [
-            [{ text: '➕ Create Preset' }, { text: '🗑️ Delete Preset' }],
+            [{ text: '➕ Create Preset' }, { text: '🎨 Manage Presets' }],
             [{ text: '🔙 Back to Main Menu' }]
         ],
         resize_keyboard: true,
@@ -249,18 +248,36 @@ async function processIncomingMessage(chatId: string, text: string) {
         return;
     }
 
-    if (trimmedText === '⬇️ Download Video') {
+    if (trimmedText === '🎶 TikTok') {
         state.step = 'awaiting_url';
-        await sendMessage(chatId, "Please send me the TikTok URL.", getCancelKeyboard());
+        await sendMessage(chatId, "Please send me the TikTok URL, or manage your presets.", getTiktokMenuKeyboard());
         return;
     }
     
     if (trimmedText === '🎨 Manage Presets') {
-        await sendMessage(chatId, "Here you can create or delete presets.", getPresetManagementKeyboard());
+        // This is now part of the TikTok menu, so we expect the state to be awaiting_url
+        if (state.step !== 'awaiting_url') {
+            state.step = 'idle';
+            await sendMessage(chatId, "Please start by clicking the '🎶 TikTok' button.", getMainMenuKeyboard());
+            return;
+        }
+        // For now, let's just list them. Deletion can be added.
+        const presetNames = Object.keys(state.presets);
+        if (presetNames.length === 0) {
+            await sendMessage(chatId, "You have no saved presets. Use 'Create Preset' to add one.", getTiktokMenuKeyboard());
+        } else {
+            await sendMessage(chatId, `Your saved presets:\n- ${presetNames.join('\n- ')}`, getTiktokMenuKeyboard());
+        }
         return;
     }
 
     if (trimmedText === '➕ Create Preset') {
+        // This is also part of the TikTok menu
+        if (state.step !== 'awaiting_url') {
+            state.step = 'idle';
+            await sendMessage(chatId, "Please start by clicking the '🎶 TikTok' button.", getMainMenuKeyboard());
+            return;
+        }
         state.step = 'awaiting_preset_name';
         await sendMessage(chatId, 'What would you like to name your new preset?', getCancelKeyboard());
         return;
@@ -357,5 +374,3 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: 'ok' });
 }
-
-    
