@@ -52,7 +52,7 @@
         fill="url(#textGradient)" 
         filter="url(#glow)"
         opacity="0.7">
-    Samuel
+    TEXT_PLACEHOLDER
     
     <!-- Glow animation -->
     <animate attributeName="filter" 

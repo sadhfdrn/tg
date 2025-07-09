@@ -45,7 +45,7 @@ export default function TestPage() {
       {
         id: 1,
         sender: "bot",
-        text: "Welcome to the TeleVerse command test page! Try `/tiktok <url>` to get started.",
+        text: "Welcome! Test commands here.\n\nUsage:\n- `/tiktok <url>` (no watermark)\n- `/tiktok-wm <url> <text>` (with watermark)",
       },
     ]);
   }, []);
@@ -134,7 +134,7 @@ export default function TestPage() {
                   )}
                 >
                   {msg.isLoading && <div className="flex items-center justify-center p-2"><Loader className="animate-spin" /></div>}
-                  {msg.text && <p className="text-sm leading-relaxed">{msg.text}</p>}
+                  {msg.text && <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>}
                   {msg.media && (
                     <div className="mt-2 space-y-2">
                       {msg.media.map((m, i) => (
@@ -167,7 +167,7 @@ export default function TestPage() {
             <div className="flex w-full items-center gap-2">
               <Input
                 type="text"
-                placeholder="Type your command, e.g. /tiktok <url>"
+                placeholder="e.g. /tiktok <url>"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}

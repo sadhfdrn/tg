@@ -76,13 +76,13 @@ export default function Home() {
                 
                 <h3 className="text-xl font-semibold mt-6 mb-2">Step 1: Set Your Bot Token</h3>
                 <p>
-                    Make sure you have added your Telegram Bot Token to the <code>.env</code> file in the project's root directory.
+                    Make sure you have added your Telegram Bot Token to the <code>.env</code> file in the project's root directory. The file should look like this:
                 </p>
                 <pre className="bg-muted p-3 rounded-md text-left text-sm"><code>TELEGRAM_BOT_TOKEN=...your_token_here...</code></pre>
 
                 <h3 className="text-xl font-semibold mt-6 mb-2">Step 2: Set Up Webhook</h3>
                 <p>
-                    Click the button below to automatically register the webhook with Telegram. This only needs to be done once.
+                    Click the button below to automatically register the webhook with Telegram. This only needs to be done once after your app is deployed.
                 </p>
             </div>
 
