@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -45,7 +46,7 @@ export default function TestPage() {
       {
         id: 1,
         sender: "bot",
-        text: "Welcome! Test commands here.\n\nUsage:\n- `/tiktok <url>` (no watermark)\n- `/tiktok-wm <url> <text>` (with watermark)",
+        text: "Welcome! Test commands here.\n\nUsage:\n- `/tiktok <url>`\n- `/tiktok-wm <url> <style.svg> <text>`",
       },
     ]);
   }, []);
@@ -186,3 +187,5 @@ export default function TestPage() {
     </main>
   );
 }
+
+    

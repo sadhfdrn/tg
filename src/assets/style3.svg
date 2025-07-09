@@ -1,0 +1,6 @@
+<svg width="500" height="100" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="500" height="100" fill="none"/>
+    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="40" fill="#39FF14" stroke="black" stroke-width="1" letter-spacing="4">
+        &lt;TEXT_PLACEHOLDER/&gt;
+    </text>
+</svg>

@@ -8,13 +8,19 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 // We will store user states in memory for this example.
-// In a production app, you'd want to use a database (e.g., Firestore, Redis).
+// In a production app, this would be in a database.
 interface UserState {
-    step: 'idle' | 'awaiting_url' | 'awaiting_preset_name';
-    lastUrl?: string;
-    presets: Record<string, string>; // name -> watermark_text
+    step: 'idle' | 'awaiting_url' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style';
+    urlBuffer?: string;
+    presetNameBuffer?: string;
+    presetStyleBuffer?: string;
+    presets: Record<string, { text: string; style: string }>; // { presetName: { text: 'watermark', style: 'style1.svg' } }
 }
+
 const userStates: Record<string, UserState> = {};
+
+// Available watermark styles
+const WATERMARK_STYLES = ['style1.svg', 'style2.svg', 'style3.svg', 'style4.svg', 'style5.svg'];
 
 function getUserState(chatId: string): UserState {
     if (!userStates[chatId]) {
@@ -33,162 +39,251 @@ async function sendTypingAction(chatId: string | number) {
 
 async function sendMessage(chatId: string | number, text: string, reply_markup?: any) {
     await sendTypingAction(chatId);
-    return axios.post(`${TELEGRAM_API_URL}/sendMessage`, { chat_id: chatId, text, reply_markup });
+    return axios.post(`${TELEGRAM_API_URL}/sendMessage`, { chat_id: chatId, text, parse_mode: 'Markdown', reply_markup });
 }
 
-function getMainReplyKeyboard() {
+// --- Keyboards ---
+
+function getMainMenuKeyboard() {
     return {
         keyboard: [
-            [{ text: '🎶 TikTok' }],
-            [{ text: '🎨 Preset' }]
+            [{ text: '⬇️ Download Video' }],
+            [{ text: '🎨 Manage Presets' }]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
     };
 }
 
-function getPresetActionInlineKeyboard(state: UserState) {
-    const presetButtons = Object.keys(state.presets).map(name => ({ text: name, callback_data: `preset_${name}` }));
+function getCancelKeyboard() {
+    return {
+        keyboard: [[{ text: '❌ Cancel' }]],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    };
+}
+
+function getDownloadOptionsKeyboard(state: UserState) {
+    const presetButtons = Object.keys(state.presets).map(name => ({ text: ` preset: ${name}` }));
     
     // Group presets into rows of 2
     const presetRows = [];
     for (let i = 0; i < presetButtons.length; i += 2) {
         presetRows.push(presetButtons.slice(i, i + 2));
     }
-    
+
     return {
-        inline_keyboard: [
+        keyboard: [
+            [{ text: '💧 No Watermark' }],
             ...presetRows,
-            [{ text: '➕ Create New Preset', callback_data: 'create_preset' }],
-            [{ text: 'Cancel', callback_data: 'cancel' }]
-        ]
+            [{ text: '❌ Cancel' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
     };
 }
 
-
-function getDownloadActionInlineKeyboard(state: UserState) {
-    const presetButtons = Object.keys(state.presets).map(name => ({ text: name, callback_data: `download_preset_${name}` }));
-
-    const presetRows = [];
-    for (let i = 0; i < presetButtons.length; i += 2) {
-        presetRows.push(presetButtons.slice(i, i + 2));
-    }
-
-    return {
-        inline_keyboard: [
-            [{ text: 'Download (No Watermark)', callback_data: 'download_no_wm' }],
-            ...presetRows,
-            [{ text: 'Cancel', callback_data: 'cancel' }]
-        ]
+function getPresetManagementKeyboard() {
+     return {
+        keyboard: [
+            [{ text: '➕ Create Preset' }],
+            [{ text: '🔙 Back to Main Menu' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
     };
+}
+
+function getStyleSelectionKeyboard() {
+    const styleButtons = WATERMARK_STYLES.map(style => ({ text: style }));
+    const styleRows = [];
+    for (let i = 0; i < styleButtons.length; i += 2) {
+        styleRows.push(styleButtons.slice(i, i + 2));
+    }
+    return {
+        keyboard: [
+            ...styleRows,
+            [{ text: '❌ Cancel' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    }
 }
 
 
 async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
 
-    // If user sends a command, cancel any pending action
-    if (text.startsWith('/')) {
-        if (state.step !== 'idle') {
+    // --- Universal Cancel ---
+    if (text === '❌ Cancel' || text === '🔙 Back to Main Menu') {
+        state.step = 'idle';
+        state.urlBuffer = undefined;
+        state.presetNameBuffer = undefined;
+        state.presetStyleBuffer = undefined;
+        await sendMessage(chatId, "Action cancelled. What would you like to do?", getMainMenuKeyboard());
+        return;
+    }
+
+    // --- State Machine ---
+    switch(state.step) {
+        case 'awaiting_url':
+            if (text.includes('tiktok.com')) {
+                state.urlBuffer = text;
+                state.step = 'idle';
+                await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
+            } else {
+                await sendMessage(chatId, "That doesn't look like a valid TikTok URL. Please try again or cancel.", getCancelKeyboard());
+            }
+            return;
+
+        case 'awaiting_preset_name':
+            if (state.presets[text]) {
+                await sendMessage(chatId, `A preset named "${text}" already exists. Please choose a different name.`, getCancelKeyboard());
+                return;
+            }
+            state.presetNameBuffer = text;
+            state.step = 'awaiting_preset_style';
+            await sendMessage(chatId, `Great! Now, choose a watermark style for the "${text}" preset.`, getStyleSelectionKeyboard());
+            return;
+
+        case 'awaiting_preset_style':
+            if (!WATERMARK_STYLES.includes(text)) {
+                await sendMessage(chatId, 'Invalid style. Please select one of the options from the keyboard.', getStyleSelectionKeyboard());
+                return;
+            }
+            state.presetStyleBuffer = text;
+            state.step = 'awaiting_preset_text';
+            await sendMessage(chatId, `Style selected! Now, what text should this watermark have?`, getCancelKeyboard());
+            return;
+
+        case 'awaiting_preset_text':
+            const presetName = state.presetNameBuffer;
+            const presetStyle = state.presetStyleBuffer;
+            const presetText = text;
+
+            if (!presetName || !presetStyle) {
+                 state.step = 'idle';
+                 await sendMessage(chatId, 'Something went wrong, please start over.', getMainMenuKeyboard());
+                 return;
+            }
+            state.presets[presetName] = { text: presetText, style: presetStyle };
             state.step = 'idle';
-            state.lastUrl = undefined;
-            await sendMessage(chatId, "Action cancelled.");
-        }
+            state.presetNameBuffer = undefined;
+            state.presetStyleBuffer = undefined;
+            await sendMessage(chatId, `✅ Preset "${presetName}" saved!`, getMainMenuKeyboard());
+            return;
+    }
+
+
+    // --- Idle State Command/Button Handling ---
+    if (text === '/start') {
+        await sendMessage(chatId, 'Welcome! Use the menu below to get started.', getMainMenuKeyboard());
+        return;
+    }
+
+    if (text === '⬇️ Download Video') {
+        state.step = 'awaiting_url';
+        await sendMessage(chatId, "Please send me the TikTok URL.", getCancelKeyboard());
+        return;
     }
     
-    // --- State-based handling ---
-    if (state.step === 'awaiting_preset_name') {
-        const presetName = text;
-        if (state.presets[presetName]) {
-             await sendMessage(chatId, `A preset named "${presetName}" already exists. Please choose a different name.`);
+    if (text === '🎨 Manage Presets') {
+        await sendMessage(chatId, "Here you can create new presets.", getPresetManagementKeyboard());
+        return;
+    }
+
+    if (text === '➕ Create Preset') {
+        state.step = 'awaiting_preset_name';
+        await sendMessage(chatId, 'What would you like to name your new preset?', getCancelKeyboard());
+        return;
+    }
+    
+    // --- Post-URL Download Options ---
+    if (text === '💧 No Watermark') {
+        if (!state.urlBuffer) {
+             await sendMessage(chatId, "I don't have a URL to download. Please start again.", getMainMenuKeyboard());
              return;
         }
-        // For simplicity, we'll use the preset name as the watermark text.
-        // A more complex bot could ask for the text separately.
-        state.presets[presetName] = presetName; 
-        state.step = 'idle';
-        await sendMessage(chatId, `✅ Preset "${presetName}" saved!`, getMainReplyKeyboard());
+        await sendMessage(chatId, "Processing your video without a watermark...", getMainMenuKeyboard());
+        await processAndSendMedia(chatId, state.urlBuffer);
+        state.urlBuffer = undefined;
         return;
     }
-
-    if (state.step === 'awaiting_url') {
-        if (text.includes('tiktok.com')) {
-            state.lastUrl = text;
-            state.step = 'idle';
-            await sendMessage(chatId, 'Got it! What would you like to do?', getDownloadActionInlineKeyboard(state));
-        } else {
-            await sendMessage(chatId, 'That does not look like a TikTok URL. Please send a valid link.');
+    
+    if (text.startsWith(' preset: ')) {
+        const presetName = text.replace(' preset: ', '');
+        const preset = state.presets[presetName];
+        if (!state.urlBuffer || !preset) {
+            await sendMessage(chatId, "Something went wrong. Please start again.", getMainMenuKeyboard());
+            return;
         }
-        return;
-    }
-    
-    // --- Command and button handling ---
-    if (text === '/start') {
-        await sendMessage(chatId, 'Welcome! Send me a TikTok URL to get started, or use the keyboard below.', getMainReplyKeyboard());
-        return;
-    }
-    
-    if (text === '🎶 TikTok') {
-        state.step = 'awaiting_url';
-        await sendMessage(chatId, 'Please send me the TikTok URL you want to download.', { remove_keyboard: true });
+        await sendMessage(chatId, `Processing with the "${presetName}" preset...`, getMainMenuKeyboard());
+        await processAndSendMedia(chatId, state.urlBuffer, preset.text, preset.style);
+        state.urlBuffer = undefined;
         return;
     }
 
-    if (text === '🎨 Preset') {
-        await sendMessage(chatId, 'Manage your watermark presets:', getPresetActionInlineKeyboard(state));
-        return;
-    }
-    
-    // Default URL handling
+
+    // Fallback for any other text in idle state
     if (text.includes('tiktok.com')) {
-        state.lastUrl = text;
-        await sendMessage(chatId, 'Got it! What would you like to do?', getDownloadActionInlineKeyboard(state));
-        return;
+        state.urlBuffer = text;
+        await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
+    } else {
+        await sendMessage(chatId, "I'm not sure what to do with that. Please use the menu below.", getMainMenuKeyboard());
     }
-
-    // Fallback for any other text
-    await sendMessage(chatId, "I'm not sure what you mean. Please send a TikTok URL or use the command buttons.", getMainReplyKeyboard());
 }
 
-async function processCallbackQuery(chatId: string, data: string) {
+async function processAndSendMedia(chatId: string, url: string, watermarkText?: string, watermarkStyle?: string) {
     const state = getUserState(chatId);
-
-    if (data === 'cancel') {
-        state.step = 'idle';
-        state.lastUrl = undefined;
-        return { text: "Action cancelled.", action: 'delete_message' };
-    }
+    state.step = 'idle'; // Reset state after processing
     
-    // --- Preset management callbacks ---
-    if (data === 'create_preset') {
-        state.step = 'awaiting_preset_name';
-        return { text: "What would you like to name your new preset?", action: 'edit_message' };
-    }
-    
-    if (data.startsWith('preset_')) {
-        const presetName = data.replace('preset_', '');
-        // In a real app, you might add options to delete or edit.
-        return { text: `You selected the preset "${presetName}".`, action: 'answer_query' };
+    let command = '/tiktok';
+    if(watermarkText && watermarkStyle) {
+        command = `/tiktok-wm ${url} ${watermarkStyle} ${watermarkText}`;
+    } else {
+        command = `/tiktok ${url}`;
     }
 
-    // --- Download action callbacks ---
-    if (data === 'download_no_wm') {
-        if (!state.lastUrl) return { text: "Sorry, I lost the URL. Please send it again.", action: 'edit_message' };
-        await sendMessage(chatId, "Processing your video without a watermark...", getMainReplyKeyboard());
-        return { url: state.lastUrl, watermark: undefined, action: 'process_media' };
-    }
-    
-    if (data.startsWith('download_preset_')) {
-        const presetName = data.replace('download_preset_', '');
-        const watermarkText = state.presets[presetName];
-        if (!state.lastUrl || !watermarkText) {
-             return { text: "Sorry, something went wrong. Please try again.", action: 'edit_message' };
+    try {
+        const response = await handleMessage(command);
+
+        if (response.text && (!response.media || response.media.length === 0)) {
+            await sendMessage(chatId, response.text, getMainMenuKeyboard());
         }
-        await sendMessage(chatId, `Processing with the "${presetName}" watermark...`, getMainReplyKeyboard());
-        return { url: state.lastUrl, watermark: watermarkText, action: 'process_media' };
-    }
 
-    return { text: "Unknown action", action: 'answer_query' };
+        if (response.media && response.media.length > 0) {
+            await sendMessage(chatId, `Found ${response.media.length} media file(s). Sending now...`, getMainMenuKeyboard());
+            for (const item of response.media) {
+                const form = new FormData();
+                form.append('chat_id', String(chatId));
+
+                const base64Data = item.url.split(';base64,').pop();
+                if (!base64Data) continue;
+
+                const fileBuffer = Buffer.from(base64Data, 'base64');
+                const fileName = item.type === 'video' ? 'video.mp4' : 'image.jpg';
+                const fileOptions = { filename: fileName, contentType: item.type === 'video' ? 'video/mp4' : 'image/jpeg' };
+
+                if (item.type === 'video') {
+                    form.append('video', fileBuffer, fileOptions);
+                    if (item.caption) form.append('caption', item.caption);
+                    await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
+                } else {
+                    form.append('photo', fileBuffer, fileOptions);
+                    if (item.caption) form.append('caption', item.caption);
+                    await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
+                }
+            }
+        }
+    } catch(error: any) {
+        console.error("Error processing and sending media:", error);
+         if (axios.isAxiosError(error) && error.response) {
+            console.error("Telegram API Error Response:", error.response.data);
+            await sendMessage(chatId, `Failed to send media: ${error.response.data.description}`, getMainMenuKeyboard());
+        } else {
+            await sendMessage(chatId, "An unexpected error occurred while sending your file. It might be too large.", getMainMenuKeyboard());
+        }
+    }
 }
 
 
@@ -206,61 +301,8 @@ export async function POST(request: Request) {
             const chatId = body.message.chat.id.toString();
             const incomingText = body.message.text;
             await processIncomingMessage(chatId, incomingText);
-
-        } else if (body.callback_query) {
-            const chatId = body.callback_query.message.chat.id.toString();
-            const messageId = body.callback_query.message.message_id;
-            const data = body.callback_query.data;
-            
-            // Acknowledge the button press immediately
-            await axios.post(`${TELEGRAM_API_URL}/answerCallbackQuery`, { callback_query_id: body.callback_query.id });
-
-            const result = await processCallbackQuery(chatId, data);
-            
-            if (result.action === 'edit_message') {
-                 await axios.post(`${TELEGRAM_API_URL}/editMessageText`, { chat_id: chatId, message_id: messageId, text: result.text });
-            }
-            if (result.action === 'delete_message') {
-                await axios.post(`${TELEGRAM_API_URL}/deleteMessage`, { chat_id: chatId, message_id: messageId });
-                await sendMessage(chatId, result.text, getMainReplyKeyboard());
-            }
-            if (result.action === 'process_media' && result.url) {
-                // Delete the inline keyboard message
-                await axios.post(`${TELEGRAM_API_URL}/deleteMessage`, { chat_id: chatId, message_id: messageId });
-
-                const response = await handleMessage(`/tiktok-wm ${result.url} ${result.watermark || ''}`.trim());
-                
-                if (response.text) {
-                     await sendMessage(chatId, response.text, getMainReplyKeyboard());
-                }
-                if (response.media && response.media.length > 0) {
-                    for (const item of response.media) {
-                        const form = new FormData();
-                        form.append('chat_id', String(chatId));
-
-                        const base64Data = item.url.split(';base64,').pop();
-                        if (!base64Data) continue;
-
-                        const fileBuffer = Buffer.from(base64Data, 'base64');
-                        const fileName = item.type === 'video' ? 'video.mp4' : 'image.jpg';
-
-                        if (item.type === 'video') {
-                            form.append('video', fileBuffer, { filename: fileName });
-                            if (item.caption) form.append('caption', item.caption);
-                            await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders() });
-                        } else {
-                            form.append('photo', fileBuffer, { filename: fileName });
-                            if (item.caption) form.append('caption', item.caption);
-                            await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders() });
-                        }
-                    }
-                }
-                const state = getUserState(chatId);
-                state.step = 'idle';
-                state.lastUrl = undefined;
-            }
         } else {
-             console.log("Update is not a standard text message or callback, skipping.");
+             console.log("Update is not a standard text message, skipping.");
         }
 
     } catch (error: any) {
@@ -272,3 +314,5 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: 'ok' });
 }
+
+    

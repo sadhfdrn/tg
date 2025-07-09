@@ -1,0 +1,21 @@
+<svg width="500" height="100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .neon-text {
+        font-family: 'Brush Script MT', cursive;
+        font-size: 45px;
+        fill: #fff;
+        text-shadow:
+          0 0 5px #fff,
+          0 0 10px #fff,
+          0 0 20px #ff00de,
+          0 0 30px #ff00de,
+          0 0 40px #ff00de,
+          0 0 55px #ff00de,
+          0 0 75px #ff00de;
+      }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="500" height="100" fill="rgba(0,0,0,0.5)"/>
+  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" class="neon-text">TEXT_PLACEHOLDER</text>
+</svg>

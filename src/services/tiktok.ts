@@ -1,3 +1,4 @@
+
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -133,17 +134,20 @@ async function downloadTikTokMedia(url: string) {
     throw new Error('All download methods failed.');
 }
 
-async function getWatermarkBuffer(text: string): Promise<Buffer> {
-    const svgPath = path.join(process.cwd(), 'src', 'assets', 'watermark.svg');
+async function getWatermarkBuffer(text: string, style: string): Promise<Buffer> {
+    const svgPath = path.join(process.cwd(), 'src', 'assets', style);
+    if (!fs.existsSync(svgPath)) {
+        throw new Error(`Watermark style ${style} not found.`);
+    }
     const svgTemplate = await fs.promises.readFile(svgPath, 'utf-8');
-    const finalSvg = svgTemplate.replace('TEXT_PLACEHOLDER', text);
+    const finalSvg = svgTemplate.replace(/TEXT_PLACEHOLDER/g, text);
     return Buffer.from(finalSvg);
 }
 
-async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string): Promise<string> {
+async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string): Promise<string> {
     await promisify(exec)('ffmpeg -version').catch(() => { throw new Error('FFmpeg not found! Please install FFmpeg.') });
     
-    const svgBuffer = await getWatermarkBuffer(watermarkText);
+    const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
     const pngBuffer = await sharp(svgBuffer).png().toBuffer();
     const watermarkPngPath = path.join(tempDir, `watermark_${Date.now()}.png`);
     await fs.promises.writeFile(watermarkPngPath, pngBuffer);
@@ -166,9 +170,9 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
     });
 }
 
-async function addWatermarkToImage(inputPath: string, outputPath: string, watermarkText: string): Promise<string> {
+async function addWatermarkToImage(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string): Promise<string> {
     const imageBuffer = await fs.promises.readFile(inputPath);
-    const svgBuffer = await getWatermarkBuffer(watermarkText);
+    const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
 
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
@@ -186,15 +190,15 @@ async function addWatermarkToImage(inputPath: string, outputPath: string, waterm
     return outputPath;
 }
 
-async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'image', index: number }[], watermarkText: string) {
+async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'image', index: number }[], watermarkText: string, watermarkStyle: string) {
     const processedFiles: { path: string, type: 'video' | 'image', index: number, originalPath: string }[] = [];
     for (const mediaFile of mediaFiles) {
         const outputPath = path.join(tempDir, `watermarked_${path.basename(mediaFile.path)}`);
         try {
             if (mediaFile.type === 'video') {
-                await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText);
+                await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText, watermarkStyle);
             } else {
-                await addWatermarkToImage(mediaFile.path, outputPath, watermarkText);
+                await addWatermarkToImage(mediaFile.path, outputPath, watermarkText, watermarkStyle);
             }
             processedFiles.push({ path: outputPath, type: mediaFile.type, index: mediaFile.index, originalPath: mediaFile.path });
         } catch (error) {
@@ -204,10 +208,10 @@ async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'im
     return processedFiles;
 }
 
-export async function processTikTokUrl(url: string, watermarkText?: string): Promise<{ path: string, originalPath: string, type: 'video' | 'image', caption: string }[]> {
+export async function processTikTokUrl(url: string, watermarkText?: string, watermarkStyle?: string): Promise<{ path: string, originalPath: string, type: 'video' | 'image', caption: string }[]> {
     const mediaFiles = await downloadTikTokMedia(url);
 
-    if (!watermarkText) {
+    if (!watermarkText || !watermarkStyle) {
         return mediaFiles.map(file => ({
             path: file.path,
             originalPath: '',
@@ -216,7 +220,7 @@ export async function processTikTokUrl(url: string, watermarkText?: string): Pro
         }));
     }
     
-    const processedFiles = await processMediaFiles(mediaFiles, watermarkText);
+    const processedFiles = await processMediaFiles(mediaFiles, watermarkText, watermarkStyle);
 
     const results = processedFiles.map(file => ({
         path: file.path,
@@ -236,3 +240,5 @@ export async function processTikTokUrl(url: string, watermarkText?: string): Pro
 
     return results;
 }
+
+    
