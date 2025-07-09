@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bot, Command, Power, Send, User } from "lucide-react";
+import Image from "next/image";
+import { Bot, Command, Send, User, Loader } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,20 +17,26 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { handleMessage } from "./actions";
+
+type Media = {
+  type: 'image' | 'video';
+  url: string;
+  caption: string;
+};
 
 type Message = {
   id: number;
   sender: "bot" | "user";
-  text: string;
+  text?: string;
+  media?: Media[];
+  isLoading?: boolean;
 };
-
-const placeholderCommands = ["start", "help", "settings", "status"];
 
 export default function Home() {
   const { toast } = useToast();
-  const [token, setToken] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,7 +44,7 @@ export default function Home() {
       {
         id: 1,
         sender: "bot",
-        text: "Welcome to TeleVerse! Please enter your Telegram Bot API token to get started.",
+        text: "Welcome to TeleVerse! I'm connected and ready. Try `/tiktok <url>` to get started.",
       },
     ]);
   }, []);
@@ -46,39 +53,42 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleConnect = () => {
-    if (token.trim().match(/^\d{8,10}:[a-zA-Z0-9_-]{35}$/)) {
-      setIsConnected(true);
-      addMessage("bot", "Successfully connected! The bot is now initialized.");
-      setTimeout(() => addMessage("bot", "Here are some available commands you can try."), 500);
-    } else {
-      toast({
-        title: "Invalid API Token",
-        description: "Please enter a valid Telegram Bot API token.",
-        variant: "destructive",
-      });
-    }
+  const addMessage = (
+    sender: "bot" | "user",
+    text?: string,
+    media?: Media[],
+    isLoading?: boolean
+  ) => {
+    const newMessage = { id: Date.now(), sender, text, media, isLoading };
+    setMessages((prev) => [...prev, newMessage]);
+    return newMessage.id;
   };
   
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    setToken("");
-    addMessage("bot", "You have been disconnected. Enter a token to connect again.");
+  const updateMessage = (id: number, text?: string, media?: Media[], isLoading?: boolean) => {
+    setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, text, media, isLoading } : msg));
   }
 
-  const addMessage = (sender: "bot" | "user", text: string) => {
-    setMessages((prev) => [...prev, { id: Date.now(), sender, text }]);
+  const handleSendMessage = async () => {
+    if (input.trim() === "") return;
+    const userMessage = input;
+    setInput("");
+    addMessage("user", userMessage);
+    const loadingMessageId = addMessage("bot", undefined, undefined, true);
+
+    try {
+      const response = await handleMessage(userMessage);
+      updateMessage(loadingMessageId, response.text, response.media, false);
+    } catch (error: any) {
+        console.error(error);
+        updateMessage(loadingMessageId, "Sorry, an unexpected error occurred.", undefined, false);
+        toast({
+            title: "Error",
+            description: error.message || "Failed to get response from server.",
+            variant: "destructive",
+        });
+    }
   };
 
-  const handleCommand = (command: string) => {
-    addMessage("user", `/${command}`);
-    setTimeout(() => {
-      addMessage(
-        "bot",
-        `The /${command} command is a placeholder and has not been implemented yet.`
-      );
-    }, 500);
-  };
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 bg-background font-body">
@@ -119,7 +129,22 @@ export default function Home() {
                       : "bg-muted"
                   )}
                 >
-                  <p className="text-sm leading-relaxed">{msg.text}</p>
+                  {msg.isLoading && <div className="flex items-center justify-center p-2"><Loader className="animate-spin" /></div>}
+                  {msg.text && <p className="text-sm leading-relaxed">{msg.text}</p>}
+                  {msg.media && (
+                    <div className="mt-2 space-y-2">
+                      {msg.media.map((m, i) => (
+                        <div key={i}>
+                          {m.type === 'image' ? (
+                            <Image src={m.url} alt={m.caption} width={300} height={400} className="rounded-lg"/>
+                          ) : (
+                            <video src={m.url} controls className="w-full rounded-lg" />
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">{m.caption}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {msg.sender === "user" && (
                   <Avatar className="w-8 h-8 flex-shrink-0">
@@ -134,47 +159,20 @@ export default function Home() {
           </div>
         </CardContent>
           
-        {isConnected && (
-            <div className="p-4 border-t bg-muted/30">
-              <p className="text-xs text-muted-foreground mb-2 text-center font-semibold tracking-wider uppercase">Available Commands</p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {placeholderCommands.map((cmd) => (
-                  <Button
-                    key={cmd}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCommand(cmd)}
-                    className="bg-accent/20 hover:bg-accent/40 border-accent/30 text-accent-foreground/80"
-                  >
-                    <Command size={14} className="mr-2" />/{cmd}
-                  </Button>
-                ))}
-              </div>
-            </div>
-        )}
-
         <CardFooter className="p-6 bg-muted/50 border-t">
-          {!isConnected ? (
             <div className="flex w-full items-center gap-2">
               <Input
-                type="password"
-                placeholder="Enter your Telegram Bot API token..."
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                type="text"
+                placeholder="Type your command, e.g. /tiktok <url>"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 className="flex-grow"
               />
-              <Button onClick={handleConnect} disabled={!token.trim()}>
-                <Send className="mr-2 h-4 w-4" /> Connect
+              <Button onClick={handleSendMessage} disabled={!input.trim()}>
+                <Send className="mr-2 h-4 w-4" /> Send
               </Button>
             </div>
-          ) : (
-            <div className="w-full flex justify-end">
-                <Button onClick={handleDisconnect} variant="destructive">
-                    <Power className="mr-2 h-4 w-4" /> Disconnect
-                </Button>
-            </div>
-          )}
         </CardFooter>
       </Card>
     </main>
