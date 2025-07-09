@@ -9,18 +9,28 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 // We will store user states in memory for this example.
 // In a production app, this would be in a database.
+type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
+
 interface UserState {
-    step: 'idle' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style';
+    step: 'idle' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
-    presets: Record<string, { text: string; style: string }>; // { presetName: { text: 'watermark', style: 'style1.svg' } }
+    presetPositionBuffer?: WatermarkPosition;
+    presets: Record<string, { text: string; style: string; position: WatermarkPosition }>;
 }
 
 const userStates: Record<string, UserState> = {};
 
 // Available watermark styles
 const WATERMARK_STYLES = ['style1.svg', 'style2.svg', 'style3.svg', 'style4.svg', 'style5.svg'];
+const WATERMARK_POSITIONS: Record<string, WatermarkPosition> = {
+    '↖️ Top Left': 'top-left',
+    '↗️ Top Right': 'top-right',
+    '⏺️ Center': 'center',
+    '↙️ Bottom Left': 'bottom-left',
+    '↘️ Bottom Right': 'bottom-right',
+}
 
 function getUserState(chatId: string): UserState {
     if (!userStates[chatId]) {
@@ -64,9 +74,8 @@ function getCancelKeyboard() {
 }
 
 function getDownloadOptionsKeyboard(state: UserState) {
-    const presetButtons = Object.keys(state.presets).map(name => ({ text: `Preset: ${name}` }));
+    const presetButtons = Object.keys(state.presets).map(name => ({ text: name }));
     
-    // Group presets into rows of 2
     const presetRows = [];
     for (let i = 0; i < presetButtons.length; i += 2) {
         presetRows.push(presetButtons.slice(i, i + 2));
@@ -110,6 +119,23 @@ function getStyleSelectionKeyboard() {
     }
 }
 
+function getWatermarkPositionKeyboard() {
+    const positionButtons = Object.keys(WATERMARK_POSITIONS).map(p => ({ text: p }));
+    const positionRows = [
+        positionButtons.slice(0, 2),
+        [positionButtons[2]],
+        positionButtons.slice(3, 5),
+    ];
+    return {
+         keyboard: [
+            ...positionRows,
+            [{ text: '❌ Cancel' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    }
+}
+
 
 async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
@@ -121,6 +147,7 @@ async function processIncomingMessage(chatId: string, text: string) {
         state.urlBuffer = undefined;
         state.presetNameBuffer = undefined;
         state.presetStyleBuffer = undefined;
+        state.presetPositionBuffer = undefined;
         await sendMessage(chatId, "Action cancelled. What would you like to do?", getMainMenuKeyboard());
         return;
     }
@@ -138,24 +165,25 @@ async function processIncomingMessage(chatId: string, text: string) {
             return;
 
         case 'awaiting_download_option':
+            const preset = state.presets[trimmedText];
             if (trimmedText === '💧 No Watermark') {
                 if (!state.urlBuffer) {
                     await sendMessage(chatId, "I don't have a URL to download. Please start again.", getMainMenuKeyboard());
+                    state.step = 'idle';
                     return;
                 }
                 await sendMessage(chatId, "Processing your video without a watermark...", getMainMenuKeyboard());
                 await processAndSendMedia(chatId, state.urlBuffer);
                 state.urlBuffer = undefined;
                 state.step = 'idle';
-            } else if (trimmedText.startsWith('Preset:')) {
-                const presetName = trimmedText.replace('Preset:', '').trim();
-                const preset = state.presets[presetName];
-                if (!state.urlBuffer || !preset) {
-                    await sendMessage(chatId, "Something went wrong. I couldn't find that preset or the URL. Please start again.", getMainMenuKeyboard());
+            } else if (preset) {
+                if (!state.urlBuffer) {
+                    await sendMessage(chatId, "I don't have a URL to download. Please start again.", getMainMenuKeyboard());
+                    state.step = 'idle';
                     return;
                 }
-                await sendMessage(chatId, `Processing with the "${presetName}" preset...`, getMainMenuKeyboard());
-                await processAndSendMedia(chatId, state.urlBuffer, preset.text, preset.style);
+                await sendMessage(chatId, `Processing with the "${trimmedText}" preset...`, getMainMenuKeyboard());
+                await processAndSendMedia(chatId, state.urlBuffer, preset.text, preset.style, preset.position);
                 state.urlBuffer = undefined;
                 state.step = 'idle';
             } else {
@@ -179,24 +207,37 @@ async function processIncomingMessage(chatId: string, text: string) {
                 return;
             }
             state.presetStyleBuffer = trimmedText;
+            state.step = 'awaiting_preset_position';
+            await sendMessage(chatId, `Style selected! Now pick a position for the watermark.`, getWatermarkPositionKeyboard());
+            return;
+
+        case 'awaiting_preset_position':
+            const position = WATERMARK_POSITIONS[trimmedText];
+            if (!position) {
+                 await sendMessage(chatId, 'Invalid position. Please select one of the options from the keyboard.', getWatermarkPositionKeyboard());
+                return;
+            }
+            state.presetPositionBuffer = position;
             state.step = 'awaiting_preset_text';
-            await sendMessage(chatId, `Style selected! Now, what text should this watermark have?`, getCancelKeyboard());
+            await sendMessage(chatId, `Position set! Finally, what text should this watermark have?`, getCancelKeyboard());
             return;
 
         case 'awaiting_preset_text':
             const presetName = state.presetNameBuffer;
             const presetStyle = state.presetStyleBuffer;
+            const presetPosition = state.presetPositionBuffer;
             const presetText = trimmedText;
 
-            if (!presetName || !presetStyle) {
+            if (!presetName || !presetStyle || !presetPosition) {
                  state.step = 'idle';
                  await sendMessage(chatId, 'Something went wrong, please start over.', getMainMenuKeyboard());
                  return;
             }
-            state.presets[presetName] = { text: presetText, style: presetStyle };
+            state.presets[presetName] = { text: presetText, style: presetStyle, position: presetPosition };
             state.step = 'idle';
             state.presetNameBuffer = undefined;
             state.presetStyleBuffer = undefined;
+            state.presetPositionBuffer = undefined;
             await sendMessage(chatId, `✅ Preset "${presetName}" saved!`, getMainMenuKeyboard());
             return;
     }
@@ -231,17 +272,17 @@ async function processIncomingMessage(chatId: string, text: string) {
         state.step = 'awaiting_download_option';
         await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
     } else {
-        await sendMessage(chatId, "I'm not sure what to do with that. Please use the menu below.", getMainMenuKeyboard());
+        await sendMessage(chatId, "I'm not sure what to do with that. Please use the menu below or send a TikTok URL.", getMainMenuKeyboard());
     }
 }
 
-async function processAndSendMedia(chatId: string, url: string, watermarkText?: string, watermarkStyle?: string) {
+async function processAndSendMedia(chatId: string, url: string, watermarkText?: string, watermarkStyle?: string, watermarkPosition?: WatermarkPosition) {
     const state = getUserState(chatId);
-    state.step = 'idle'; // Reset state after processing
+    state.step = 'idle';
     
     let command = '/tiktok';
-    if(watermarkText && watermarkStyle) {
-        command = `/tiktok-wm ${url} ${watermarkStyle} ${watermarkText}`;
+    if(watermarkText && watermarkStyle && watermarkPosition) {
+        command = `/tiktok-wm ${url} ${watermarkStyle} ${watermarkPosition} ${watermarkText}`;
     } else {
         command = `/tiktok ${url}`;
     }
@@ -316,3 +357,5 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: 'ok' });
 }
+
+    

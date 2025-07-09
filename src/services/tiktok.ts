@@ -9,6 +9,8 @@ import axios from 'axios';
 import tiktokdl from '@tobyg74/tiktok-api-dl';
 import sharp from 'sharp';
 
+type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
+
 const userAgents = [
     'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -36,25 +38,13 @@ function getRandomUserAgent() {
 
 function parseCookie(cookieInput: string): string {
     if (!cookieInput) return '';
-
-    // Check if it's likely a Netscape cookie file content
     if (cookieInput.includes('# Netscape HTTP Cookie File')) {
-        return cookieInput
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line && !line.startsWith('#'))
-            .map(line => {
-                const parts = line.split('\t');
-                if (parts.length >= 7) {
-                    return `${parts[5]}=${parts[6]}`;
-                }
-                return null;
-            })
-            .filter(Boolean)
-            .join('; ');
+        return cookieInput.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#')).map(line => {
+            const parts = line.split('\t');
+            if (parts.length >= 7) return `${parts[5]}=${parts[6]}`;
+            return null;
+        }).filter(Boolean).join('; ');
     }
-    
-    // Assume it's a header string or needs no parsing
     return cookieInput.replace(/\r\n/g, '').replace(/\n/g, '');
 }
 
@@ -126,7 +116,7 @@ async function downloadWithTobyAPI(url: string, cookie: string) {
             const result = await tiktokdl.Downloader(url, { version, cookie });
             if (result.status === 'success' && result.result) {
                  const mediaData = await extractMediaData(result.result);
-                if (mediaData.length === 0) continue; // Try next version if no media found
+                if (mediaData.length === 0) continue;
                 return downloadMediaFiles(mediaData, `toby_api_${version}`);
             }
         } catch(e) {
@@ -185,7 +175,20 @@ async function getWatermarkBuffer(text: string, style: string): Promise<Buffer> 
     return Buffer.from(finalSvg);
 }
 
-async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string): Promise<string> {
+function getFfmpegOverlay(position: WatermarkPosition = 'bottom-right'): string {
+    const margin = 10;
+    switch(position) {
+        case 'top-left': return `overlay=${margin}:${margin}`;
+        case 'top-right': return `overlay=W-w-${margin}:${margin}`;
+        case 'center': return `overlay=(W-w)/2:(H-h)/2`;
+        case 'bottom-left': return `overlay=${margin}:H-h-${margin}`;
+        case 'bottom-right':
+        default:
+             return `overlay=W-w-${margin}:H-h-${margin}`;
+    }
+}
+
+async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition): Promise<string> {
     await promisify(exec)('ffmpeg -version').catch(() => { throw new Error('FFmpeg not found! Please install FFmpeg.') });
     
     const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
@@ -193,10 +196,12 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
     const watermarkPngPath = path.join(tempDir, `watermark_${Date.now()}.png`);
     await fs.promises.writeFile(watermarkPngPath, pngBuffer);
     
+    const overlayCommand = getFfmpegOverlay(watermarkPosition);
+
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
             .input(watermarkPngPath)
-            .complexFilter("[1:v]scale=iw*0.25:-1[wm];[0:v][wm]overlay=W-w-10:H-h-10")
+            .complexFilter(`[1:v]scale=iw*0.25:-1[wm];[0:v][wm]${overlayCommand}`)
             .outputOptions(['-c:v libx264', '-preset fast', '-crf 23', '-c:a copy'])
             .output(outputPath)
             .on('end', () => {
@@ -211,7 +216,19 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
     });
 }
 
-async function addWatermarkToImage(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string): Promise<string> {
+function getSharpGravity(position: WatermarkPosition = 'bottom-right'): sharp.Gravity {
+     switch(position) {
+        case 'top-left': return 'northwest';
+        case 'top-right': return 'northeast';
+        case 'center': return 'center';
+        case 'bottom-left': return 'southwest';
+        case 'bottom-right':
+        default:
+             return 'southeast';
+    }
+}
+
+async function addWatermarkToImage(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition): Promise<string> {
     const imageBuffer = await fs.promises.readFile(inputPath);
     const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
 
@@ -224,22 +241,27 @@ async function addWatermarkToImage(inputPath: string, outputPath: string, waterm
         .toBuffer();
 
     await sharp(imageBuffer)
-        .composite([{ input: watermarkResized, gravity: 'southeast', dx: 20, dy: 20 }])
+        .composite([{ 
+            input: watermarkResized, 
+            gravity: getSharpGravity(watermarkPosition),
+            dx: 20, 
+            dy: 20 
+        }])
         .jpeg({ quality: 90 })
         .toFile(outputPath);
 
     return outputPath;
 }
 
-async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'image', index: number }[], watermarkText: string, watermarkStyle: string) {
+async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'image', index: number }[], watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition) {
     const processedFiles: { path: string, type: 'video' | 'image', index: number, originalPath: string }[] = [];
     for (const mediaFile of mediaFiles) {
         const outputPath = path.join(tempDir, `watermarked_${path.basename(mediaFile.path)}`);
         try {
             if (mediaFile.type === 'video') {
-                await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText, watermarkStyle);
+                await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition);
             } else {
-                await addWatermarkToImage(mediaFile.path, outputPath, watermarkText, watermarkStyle);
+                await addWatermarkToImage(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition);
             }
             processedFiles.push({ path: outputPath, type: mediaFile.type, index: mediaFile.index, originalPath: mediaFile.path });
         } catch (error) {
@@ -249,10 +271,10 @@ async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'im
     return processedFiles;
 }
 
-export async function processTikTokUrl(url: string, watermarkText?: string, watermarkStyle?: string): Promise<{ path: string, originalPath: string, type: 'video' | 'image', caption: string }[]> {
+export async function processTikTokUrl(url: string, watermarkText?: string, watermarkStyle?: string, watermarkPosition?: WatermarkPosition): Promise<{ path: string, originalPath: string, type: 'video' | 'image', caption: string }[]> {
     const mediaFiles = await downloadTikTokMedia(url);
 
-    if (!watermarkText || !watermarkStyle) {
+    if (!watermarkText || !watermarkStyle || !watermarkPosition) {
         return mediaFiles.map(file => ({
             path: file.path,
             originalPath: '',
@@ -261,7 +283,7 @@ export async function processTikTokUrl(url: string, watermarkText?: string, wate
         }));
     }
     
-    const processedFiles = await processMediaFiles(mediaFiles, watermarkText, watermarkStyle);
+    const processedFiles = await processMediaFiles(mediaFiles, watermarkText, watermarkStyle, watermarkPosition);
 
     const results = processedFiles.map(file => ({
         path: file.path,
@@ -280,3 +302,5 @@ export async function processTikTokUrl(url: string, watermarkText?: string, wate
 
     return results;
 }
+
+    

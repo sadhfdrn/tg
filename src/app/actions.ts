@@ -56,9 +56,9 @@ export async function handleMessage(message: string): Promise<{
       });
   }
 
-  const processAndFormatMedia = async (url: string, watermarkStyle?: string, watermarkText?: string) => {
+  const processAndFormatMedia = async (url: string, watermarkStyle?: string, watermarkPosition?: string, watermarkText?: string) => {
     try {
-      const processedMedia = await processTikTokUrl(url, watermarkText, watermarkStyle);
+      const processedMedia = await processTikTokUrl(url, watermarkText, watermarkStyle, watermarkPosition as any);
       if (processedMedia.length === 0) {
         return { text: 'Could not process the TikTok video. It might be private, deleted, or the URL is invalid.' };
       }
@@ -94,11 +94,12 @@ export async function handleMessage(message: string): Promise<{
   if (cmd === '/tiktok-wm') {
     const url = parts[1];
     const watermarkStyle = parts[2];
-    const watermarkText = parts.slice(3).join(' ');
-    if (!url || !watermarkStyle || !watermarkText) {
-      return { text: 'Please provide a URL, style, and watermark text. Usage: /tiktok-wm <url> <style.svg> <text>' };
+    const watermarkPosition = parts[3];
+    const watermarkText = parts.slice(4).join(' ');
+    if (!url || !watermarkStyle || !watermarkPosition || !watermarkText) {
+      return { text: 'Please provide a URL, style, position, and watermark text. Usage: /tiktok-wm <url> <style.svg> <position> <text>' };
     }
-    return processAndFormatMedia(url, watermarkStyle, watermarkText);
+    return processAndFormatMedia(url, watermarkStyle, watermarkPosition, watermarkText);
   }
 
   const otherCommands = ['/start', '/help', '/settings', '/status'];
@@ -109,7 +110,7 @@ export async function handleMessage(message: string): Promise<{
   }
 
   return {
-    text: "I don't understand that command. Try `/tiktok <url>` or `/tiktok-wm <url> <style.svg> <text>`."
+    text: "I don't understand that command. Try `/tiktok <url>` or `/tiktok-wm <url> <style.svg> <position> <text>`."
   }
 }
 
