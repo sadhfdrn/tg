@@ -71,7 +71,7 @@ export default function Home() {
             <div className="prose prose-sm max-w-none text-foreground">
                 <h2 className="text-2xl font-semibold mb-4">Welcome!</h2>
                 <p>
-                    This application is the backend for your Telegram bot. To get started, you need to set up the webhook so Telegram knows where to send messages.
+                    This application is the backend for your Telegram bot. For Telegram to communicate with your bot, it needs a public URL (a "webhook"). This process sets that up.
                 </p>
                 
                 <h3 className="text-xl font-semibold mt-6 mb-2">Step 1: Set Your Bot Token</h3>
@@ -82,7 +82,7 @@ export default function Home() {
 
                 <h3 className="text-xl font-semibold mt-6 mb-2">Step 2: Set Up Webhook</h3>
                 <p>
-                    Click the button below to automatically register the webhook with Telegram. This only needs to be done once after your app is deployed.
+                    Click the button below to automatically register this application's public URL as the webhook for your bot. This only needs to be done once after your app is deployed.
                 </p>
             </div>
 
