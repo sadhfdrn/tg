@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Bot, Command, Send, User, Loader, TestTube2 } from "lucide-react";
+import { Bot, Command, Send, User, Loader, TestTube2, ArrowLeft } from "lucide-react";
 import Link from 'next/link';
 
 import { Button } from "@/components/ui/button";
@@ -93,9 +93,13 @@ export default function TestPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8 bg-background font-body">
-      <Link href="/" className="mb-4">
-        <Button variant="outline">&larr; Back to Home</Button>
-      </Link>
+      <div className="absolute top-4 left-4">
+          <Button asChild variant="outline">
+            <Link href="/">
+                <ArrowLeft className="mr-2" /> Back to Home
+            </Link>
+          </Button>
+      </div>
       <Card className="w-full max-w-2xl mx-auto shadow-2xl rounded-2xl overflow-hidden flex flex-col h-[90vh] max-h-[700px]">
         <CardHeader className="text-center bg-card-foreground text-primary-foreground p-6">
           <div className="flex justify-center items-center gap-4">

@@ -3,6 +3,7 @@
 import fs from 'fs';
 import { processTikTokUrl } from '@/services/tiktok'
 import axios from 'axios';
+import FormData from 'form-data';
 
 export async function sendMessageToUser(formData: FormData): Promise<{ success: boolean; message: string }> {
   const chatId = formData.get('chatId');
