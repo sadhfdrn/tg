@@ -10,7 +10,7 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 // We will store user states in memory for this example.
 // In a production app, this would be in a database.
 interface UserState {
-    step: 'idle' | 'awaiting_url' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style';
+    step: 'idle' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
@@ -64,7 +64,7 @@ function getCancelKeyboard() {
 }
 
 function getDownloadOptionsKeyboard(state: UserState) {
-    const presetButtons = Object.keys(state.presets).map(name => ({ text: ` preset: ${name}` }));
+    const presetButtons = Object.keys(state.presets).map(name => ({ text: `Preset: ${name}` }));
     
     // Group presets into rows of 2
     const presetRows = [];
@@ -86,7 +86,7 @@ function getDownloadOptionsKeyboard(state: UserState) {
 function getPresetManagementKeyboard() {
      return {
         keyboard: [
-            [{ text: '➕ Create Preset' }],
+            [{ text: '➕ Create Preset' }, { text: '🗑️ Delete Preset' }],
             [{ text: '🔙 Back to Main Menu' }]
         ],
         resize_keyboard: true,
@@ -115,7 +115,7 @@ async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
     const trimmedText = text.trim();
 
-    // --- Universal Cancel ---
+    // --- Universal Cancel / Back ---
     if (trimmedText === '❌ Cancel' || trimmedText === '🔙 Back to Main Menu') {
         state.step = 'idle';
         state.urlBuffer = undefined;
@@ -130,10 +130,36 @@ async function processIncomingMessage(chatId: string, text: string) {
         case 'awaiting_url':
             if (trimmedText.includes('tiktok.com')) {
                 state.urlBuffer = trimmedText;
-                state.step = 'idle';
+                state.step = 'awaiting_download_option';
                 await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
             } else {
                 await sendMessage(chatId, "That doesn't look like a valid TikTok URL. Please try again or cancel.", getCancelKeyboard());
+            }
+            return;
+
+        case 'awaiting_download_option':
+            if (trimmedText === '💧 No Watermark') {
+                if (!state.urlBuffer) {
+                    await sendMessage(chatId, "I don't have a URL to download. Please start again.", getMainMenuKeyboard());
+                    return;
+                }
+                await sendMessage(chatId, "Processing your video without a watermark...", getMainMenuKeyboard());
+                await processAndSendMedia(chatId, state.urlBuffer);
+                state.urlBuffer = undefined;
+                state.step = 'idle';
+            } else if (trimmedText.startsWith('Preset:')) {
+                const presetName = trimmedText.replace('Preset:', '').trim();
+                const preset = state.presets[presetName];
+                if (!state.urlBuffer || !preset) {
+                    await sendMessage(chatId, "Something went wrong. I couldn't find that preset or the URL. Please start again.", getMainMenuKeyboard());
+                    return;
+                }
+                await sendMessage(chatId, `Processing with the "${presetName}" preset...`, getMainMenuKeyboard());
+                await processAndSendMedia(chatId, state.urlBuffer, preset.text, preset.style);
+                state.urlBuffer = undefined;
+                state.step = 'idle';
+            } else {
+                await sendMessage(chatId, "Invalid option. Please choose from the keyboard.", getDownloadOptionsKeyboard(state));
             }
             return;
 
@@ -189,7 +215,7 @@ async function processIncomingMessage(chatId: string, text: string) {
     }
     
     if (trimmedText === '🎨 Manage Presets') {
-        await sendMessage(chatId, "Here you can create new presets.", getPresetManagementKeyboard());
+        await sendMessage(chatId, "Here you can create or delete presets.", getPresetManagementKeyboard());
         return;
     }
 
@@ -199,35 +225,10 @@ async function processIncomingMessage(chatId: string, text: string) {
         return;
     }
     
-    // --- Post-URL Download Options ---
-    if (trimmedText === '💧 No Watermark') {
-        if (!state.urlBuffer) {
-             await sendMessage(chatId, "I don't have a URL to download. Please start again.", getMainMenuKeyboard());
-             return;
-        }
-        await sendMessage(chatId, "Processing your video without a watermark...", getMainMenuKeyboard());
-        await processAndSendMedia(chatId, state.urlBuffer);
-        state.urlBuffer = undefined;
-        return;
-    }
-    
-    if (trimmedText.startsWith('preset:')) {
-        const presetName = trimmedText.replace('preset:', '').trim();
-        const preset = state.presets[presetName];
-        if (!state.urlBuffer || !preset) {
-            await sendMessage(chatId, "Something went wrong. Please start again.", getMainMenuKeyboard());
-            return;
-        }
-        await sendMessage(chatId, `Processing with the "${presetName}" preset...`, getMainMenuKeyboard());
-        await processAndSendMedia(chatId, state.urlBuffer, preset.text, preset.style);
-        state.urlBuffer = undefined;
-        return;
-    }
-
-
     // Fallback for any other text in idle state
     if (trimmedText.includes('tiktok.com')) {
         state.urlBuffer = trimmedText;
+        state.step = 'awaiting_download_option';
         await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
     } else {
         await sendMessage(chatId, "I'm not sure what to do with that. Please use the menu below.", getMainMenuKeyboard());
