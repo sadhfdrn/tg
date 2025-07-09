@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import FormData from 'form-data';
@@ -78,9 +79,9 @@ function buildMainMenuKeyboard(chatId: number) {
 
     return {
         inline_keyboard: [
-            [{ text: '🎶 TikTok (No Watermark)', callback_data: 'download_no_watermark' }],
+            [{ text: '🎶 TikTok', callback_data: 'download_no_watermark' }],
             ...presetButtons,
-            [{ text: '✨ Create New Preset', callback_data: 'create_preset' }],
+            [{ text: '🎨 Create Preset', callback_data: 'create_preset' }],
         ],
     };
 }
@@ -244,7 +245,7 @@ export async function POST(request: Request) {
             } else if (text.match(/https?:\/\/(?:www\.)?tiktok\.com/)) {
                 await handleIncomingUrl(chatId, text);
             } else {
-                 await sendMessage(chatId, "I don't understand that. Please send a TikTok URL or use /start to see options.");
+                 await sendMessage(chatId, "I'm connected! But I don't understand that command. Please send a TikTok URL or use /start to see the main menu.");
             }
         }
     } catch (error) {
