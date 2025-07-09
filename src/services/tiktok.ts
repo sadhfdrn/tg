@@ -22,7 +22,6 @@ if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
 
-// Check for dependencies on startup
 (async () => {
     try {
         await promisify(exec)('ffmpeg -version');
@@ -33,6 +32,30 @@ if (!fs.existsSync(tempDir)) {
 
 function getRandomUserAgent() {
     return userAgents[Math.floor(Math.random() * userAgents.length)];
+}
+
+function parseCookie(cookieInput: string): string {
+    if (!cookieInput) return '';
+
+    // Check if it's likely a Netscape cookie file content
+    if (cookieInput.includes('# Netscape HTTP Cookie File')) {
+        return cookieInput
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#'))
+            .map(line => {
+                const parts = line.split('\t');
+                if (parts.length >= 7) {
+                    return `${parts[5]}=${parts[6]}`;
+                }
+                return null;
+            })
+            .filter(Boolean)
+            .join('; ');
+    }
+    
+    // Assume it's a header string or needs no parsing
+    return cookieInput.replace(/\r\n/g, '').replace(/\n/g, '');
 }
 
 function extractVideoUrl(result: any) {
@@ -96,13 +119,23 @@ async function downloadMediaFiles(mediaData: { type: 'video' | 'image', url: str
     return downloadedFiles;
 }
 
-async function downloadWithTobyAPI(url: string) {
-    const result = await tiktokdl.Downloader(url, { version: "v3" }).catch(() => tiktokdl.Downloader(url, { version: "v1" }));
-    if (result.status !== 'success' || !result.result) throw new Error(result.message || 'API returned unsuccessful status');
-    const mediaData = await extractMediaData(result.result);
-    if (mediaData.length === 0) throw new Error('No media found in API response');
-    return downloadMediaFiles(mediaData, 'toby_api');
+async function downloadWithTobyAPI(url: string, cookie: string) {
+    const versions = ['v3', 'v1'];
+    for (const version of versions) {
+        try {
+            const result = await tiktokdl.Downloader(url, { version, cookie });
+            if (result.status === 'success' && result.result) {
+                 const mediaData = await extractMediaData(result.result);
+                if (mediaData.length === 0) continue; // Try next version if no media found
+                return downloadMediaFiles(mediaData, `toby_api_${version}`);
+            }
+        } catch(e) {
+             console.log(`Toby API ${version} failed: ${(e as Error).message}`);
+        }
+    }
+    throw new Error('All Toby API versions failed');
 }
+
 
 async function downloadWithAlternativeAPI(url: string) {
     const endpoint = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`;
@@ -123,16 +156,24 @@ async function downloadWithAlternativeAPI(url: string) {
 }
 
 async function downloadTikTokMedia(url: string) {
-    const methods = [() => downloadWithTobyAPI(url), () => downloadWithAlternativeAPI(url)];
+    const cookie = parseCookie(process.env.TIKTOK_COOKIE || '');
+    
+    const methods = [
+        () => downloadWithTobyAPI(url, cookie), 
+        () => downloadWithAlternativeAPI(url)
+    ];
+
     for (const method of methods) {
         try {
-            return await method();
+            const result = await method();
+            if (result && result.length > 0) return result;
         } catch (error: any) {
             console.log(`Download method failed: ${error.message}`);
         }
     }
     throw new Error('All download methods failed.');
 }
+
 
 async function getWatermarkBuffer(text: string, style: string): Promise<Buffer> {
     const svgPath = path.join(process.cwd(), 'src', 'assets', style);
@@ -229,7 +270,6 @@ export async function processTikTokUrl(url: string, watermarkText?: string, wate
         caption: processedFiles.length > 1 ? `${file.type.toUpperCase()} ${file.index + 1}/${processedFiles.length}` : `Watermarked ${file.type}`
     }));
 
-    // Perform cleanup for original downloaded files that were successfully processed
     processedFiles.forEach(file => {
          try {
             if (fs.existsSync(file.originalPath)) fs.unlinkSync(file.originalPath);
@@ -240,5 +280,3 @@ export async function processTikTokUrl(url: string, watermarkText?: string, wate
 
     return results;
 }
-
-    
