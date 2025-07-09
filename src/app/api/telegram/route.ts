@@ -21,47 +21,64 @@ export async function POST(request: Request) {
         const body = await request.json();
         console.log("Received update:", JSON.stringify(body, null, 2));
 
-        if (!body.message || !body.message.chat || !body.message.text) {
-            console.log("Update is not a standard text message, skipping.");
-            return NextResponse.json({ status: 'ok' });
-        }
-        
-        const chatId = body.message.chat.id;
-        const incomingText = body.message.text;
+        if (body.message && body.message.chat && body.message.text) {
+            const chatId = body.message.chat.id;
+            const incomingText = body.message.text;
 
-        await sendTypingAction(chatId);
+            await sendTypingAction(chatId);
 
-        const response = await handleMessage(incomingText);
+            const response = await handleMessage(incomingText);
 
-        if (response.text) {
-            await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
-                chat_id: chatId,
-                text: response.text,
-            });
-        }
+            if (response.text) {
+                await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+                    chat_id: chatId,
+                    text: response.text,
+                });
+            }
 
-        if (response.media && response.media.length > 0) {
-            for (const item of response.media) {
-                const form = new FormData();
-                form.append('chat_id', String(chatId));
+            if (response.media && response.media.length > 0) {
+                for (const item of response.media) {
+                    const form = new FormData();
+                    form.append('chat_id', String(chatId));
 
-                const base64Data = item.url.split(';base64,').pop();
-                if (!base64Data) continue;
+                    const base64Data = item.url.split(';base64,').pop();
+                    if (!base64Data) continue;
 
-                const fileBuffer = Buffer.from(base64Data, 'base64');
-                const fileName = item.type === 'video' ? 'video.mp4' : 'image.jpg';
+                    const fileBuffer = Buffer.from(base64Data, 'base64');
+                    const fileName = item.type === 'video' ? 'video.mp4' : 'image.jpg';
 
-                if (item.type === 'video') {
-                    form.append('video', fileBuffer, { filename: fileName });
-                    if (item.caption) form.append('caption', item.caption);
-                    await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders() });
-                } else { // image
-                    form.append('photo', fileBuffer, { filename: fileName });
-                    if (item.caption) form.append('caption', item.caption);
-                    await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders() });
+                    if (item.type === 'video') {
+                        form.append('video', fileBuffer, { filename: fileName });
+                        if (item.caption) form.append('caption', item.caption);
+                        await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders() });
+                    } else { // image
+                        form.append('photo', fileBuffer, { filename: fileName });
+                        if (item.caption) form.append('caption', item.caption);
+                        await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders() });
+                    }
                 }
             }
+        // This part handles button presses from inline keyboards
+        } else if (body.callback_query) {
+             const chatId = body.callback_query.message.chat.id;
+             const data = body.callback_query.data;
+
+             await axios.post(`${TELEGRAM_API_URL}/answerCallbackQuery`, {
+                callback_query_id: body.callback_query.id,
+             });
+
+             await sendTypingAction(chatId);
+
+             // Here you would handle the callback data
+             // For now, let's just acknowledge it.
+             await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+                chat_id: chatId,
+                text: `You pressed a button! Data: ${data}`,
+             });
+        } else {
+             console.log("Update is not a standard text message or callback, skipping.");
         }
+
     } catch (error: any) {
         console.error("Error processing webhook:", error.message);
         if (axios.isAxiosError(error) && error.response) {
