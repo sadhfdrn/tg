@@ -12,7 +12,7 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
 interface UserState {
-    step: 'idle' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position';
+    step: 'idle' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
@@ -67,7 +67,7 @@ function getMainMenuKeyboard() {
 function getManagePresetsKeyboard() {
     return {
         keyboard: [
-            [{ text: '➕ Create Preset' }, { text: '✏️ Edit Preset' }],
+            [{ text: '➕ Create Preset' }, { text: '🗑️ Delete Preset' }],
             [{ text: '🔙 Back to Main Menu' }]
         ],
         resize_keyboard: true,
@@ -136,6 +136,24 @@ function getWatermarkPositionKeyboard() {
     }
 }
 
+function getDeletePresetKeyboard(state: UserState) {
+    const presetButtons = Object.keys(state.presets).map(name => ({ text: `Delete: ${name}` }));
+
+    const presetRows = [];
+    for (let i = 0; i < presetButtons.length; i += 2) {
+        presetRows.push(presetButtons.slice(i, i + 2));
+    }
+
+    return {
+        keyboard: [
+            ...presetRows,
+            [{ text: '❌ Cancel' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    };
+}
+
 
 async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
@@ -191,10 +209,32 @@ async function processIncomingMessage(chatId: string, text: string) {
             if (trimmedText === '➕ Create Preset') {
                 state.step = 'awaiting_preset_name';
                 await sendMessage(chatId, 'What would you like to name your new preset?', getCancelKeyboard());
-            } else if (trimmedText === '✏️ Edit Preset') {
-                await sendMessage(chatId, 'The "Edit Preset" feature is coming soon!', getManagePresetsKeyboard());
+            } else if (trimmedText === '🗑️ Delete Preset') {
+                const presetNames = Object.keys(state.presets);
+                if (presetNames.length === 0) {
+                     await sendMessage(chatId, "You don't have any presets to delete.", getManagePresetsKeyboard());
+                     state.step = 'idle'; // Back to main if no presets
+                } else {
+                    state.step = 'awaiting_preset_to_delete';
+                    await sendMessage(chatId, 'Which preset would you like to delete?', getDeletePresetKeyboard(state));
+                }
             } else {
                 await sendMessage(chatId, 'Please choose an option from the keyboard.', getManagePresetsKeyboard());
+            }
+            return;
+
+        case 'awaiting_preset_to_delete':
+            if (trimmedText.startsWith('Delete: ')) {
+                const presetNameToDelete = trimmedText.substring(8); // Length of "Delete: "
+                if (state.presets[presetNameToDelete]) {
+                    delete state.presets[presetNameToDelete];
+                    state.step = 'idle';
+                    await sendMessage(chatId, `✅ Preset "${presetNameToDelete}" has been deleted.`, getMainMenuKeyboard());
+                } else {
+                    await sendMessage(chatId, `Preset "${presetNameToDelete}" not found. Please choose a preset to delete from the keyboard.`, getDeletePresetKeyboard(state));
+                }
+            } else {
+                 await sendMessage(chatId, 'Invalid selection. Please choose a preset to delete from the keyboard.', getDeletePresetKeyboard(state));
             }
             return;
 
@@ -265,7 +305,7 @@ async function processIncomingMessage(chatId: string, text: string) {
     if (trimmedText === '🎨 Manage Presets') {
         state.step = 'awaiting_preset_management_action';
         const presetNames = Object.keys(state.presets);
-        let message = "You can create a new preset or edit an existing one.\n";
+        let message = "You can create a new preset or delete an existing one.\n";
         if (presetNames.length > 0) {
             message += `\nYour current presets:\n- ${presetNames.join('\n- ')}`;
         } else {
