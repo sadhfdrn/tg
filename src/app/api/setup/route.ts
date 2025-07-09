@@ -22,16 +22,32 @@ export async function GET(request: Request) {
     const webhookUrl = `${appUrl}/api/telegram`;
 
     try {
-        const response = await axios.get(`https://api.telegram.org/bot${botToken}/setWebhook?url=${webhookUrl}`);
+        // Using axios params to ensure proper URL encoding
+        const response = await axios.get(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+            params: { url: webhookUrl }
+        });
+
+        // This block is reached for 2xx responses. We still check the `ok` flag.
         if (response.data.ok) {
             console.log("Webhook set successfully:", response.data);
             return NextResponse.json({ message: `Webhook set to: ${webhookUrl}` });
         } else {
-            console.error("Failed to set webhook:", response.data);
+            // This case handles successful requests that result in a logical error on Telegram's side.
+            console.error("Failed to set webhook (API returned ok:false):", response.data);
             return NextResponse.json({ message: `Failed to set webhook: ${response.data.description}` }, { status: 400 });
         }
     } catch (error: any) {
-        console.error("Error setting webhook:", error);
-        return NextResponse.json({ message: `Error setting webhook: ${error.message}` }, { status: 500 });
+        // This block catches non-2xx responses from the Telegram API
+        if (axios.isAxiosError(error) && error.response) {
+            console.error("Error from Telegram API:", error.response.data);
+            const description = error.response.data.description || 'An unknown error occurred.';
+            const statusCode = error.response.status || 500;
+             // The frontend expects a 'message' property in the JSON response.
+            return NextResponse.json({ message: `Setup failed: ${description}` }, { status: statusCode });
+        }
+        
+        // This handles other errors, like network problems.
+        console.error("Error setting webhook:", error.message);
+        return NextResponse.json({ message: `An unexpected error occurred: ${error.message}` }, { status: 500 });
     }
 }
