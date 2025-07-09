@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from 'next/link';
-import { Bot, TestTube2, CheckCircle, AlertCircle, Loader } from "lucide-react";
+import { Bot, TestTube2, CheckCircle, AlertCircle, Loader, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -96,16 +96,29 @@ export default function Home() {
                 </div>
             )}
 
-            <div className="mt-8 border-t pt-6">
-                <h3 className="text-xl font-semibold mb-2">Test Your Commands</h3>
-                <p className="text-muted-foreground mb-4">
-                    If you need to test commands without using Telegram, you can use the test page.
-                </p>
-                <Button asChild variant="outline">
-                    <Link href="/test">
-                        <TestTube2 className="mr-2" /> Go to Test Page
-                    </Link>
-                </Button>
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-6">
+                <div className="flex flex-col items-center gap-2">
+                    <h3 className="text-lg font-semibold">Test Your Commands</h3>
+                    <p className="text-muted-foreground text-sm">
+                        Use the test page to try commands without using Telegram.
+                    </p>
+                    <Button asChild variant="outline">
+                        <Link href="/test">
+                            <TestTube2 className="mr-2" /> Go to Test Page
+                        </Link>
+                    </Button>
+                </div>
+                 <div className="flex flex-col items-center gap-2">
+                    <h3 className="text-lg font-semibold">Broadcast Tool</h3>
+                    <p className="text-muted-foreground text-sm">
+                        Send a message from your bot to a specific user.
+                    </p>
+                    <Button asChild variant="outline">
+                        <Link href="/send-message">
+                            <MessageSquare className="mr-2" /> Send a Message
+                        </Link>
+                    </Button>
+                </div>
             </div>
         </CardContent>
       </Card>
