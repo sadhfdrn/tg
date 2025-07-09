@@ -11,19 +11,9 @@ export async function GET(request: Request) {
     // --- Robust Webhook URL Determination ---
     const requestUrl = new URL(request.url);
     
-    // Get protocol from header, fallback to URL, and remove colon if present.
-    let protocol = request.headers.get('x-forwarded-proto') || requestUrl.protocol;
-    protocol = protocol.replace(':', ''); // 'https:' -> 'https', 'http:' -> 'http'
-
+    // Get host from proxy headers first, then fallback to request headers/URL.
+    // This is crucial for correctly identifying the public URL when behind a reverse proxy.
     const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || requestUrl.host;
-
-    // Telegram API requires the webhook URL to be HTTPS.
-    // This check ensures we don't even try if the detected protocol is not secure.
-    if (protocol !== 'https') {
-        return NextResponse.json({ 
-            message: 'Webhook URL must use HTTPS. Your app seems to be running on HTTP.' 
-        }, { status: 400 });
-    }
 
     // A webhook URL must be a public URL, it cannot be localhost.
     if (host.startsWith('localhost') || host.startsWith('127.0.0.1')) {
@@ -32,7 +22,8 @@ export async function GET(request: Request) {
         }, { status: 400 });
     }
 
-    // We've confirmed the protocol should be https, so we'll build the URL with it.
+    // Since Telegram requires HTTPS, we'll build the URL with 'https://' directly.
+    // This avoids issues where the internal protocol is 'http' but the public one is 'https'.
     const appUrl = `https://${host}`;
     const webhookUrl = `${appUrl}/api/telegram`;
 
