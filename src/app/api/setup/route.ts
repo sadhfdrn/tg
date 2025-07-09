@@ -8,17 +8,29 @@ export async function GET(request: Request) {
         return NextResponse.json({ message: 'TELEGRAM_BOT_TOKEN is not set in .env file.' }, { status: 500 });
     }
 
-    // Automatically determine the app's public URL from the request headers
+    // --- Robust Webhook URL Determination ---
     const requestUrl = new URL(request.url);
-    const appUrl = requestUrl.origin;
+    
+    // Use proxy headers if available, otherwise fall back to the direct request info.
+    // This is crucial for environments like Firebase App Hosting, Vercel, etc.
+    const protocol = request.headers.get('x-forwarded-proto') || requestUrl.protocol;
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || requestUrl.host;
+
+    // Telegram API requires the webhook URL to be HTTPS.
+    if (protocol !== 'https:') {
+        return NextResponse.json({ 
+            message: 'Webhook URL must use HTTPS. Your app seems to be running on HTTP.' 
+        }, { status: 400 });
+    }
 
     // A webhook URL must be a public URL, it cannot be localhost.
-    if (requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1') {
+    if (host.startsWith('localhost') || host.startsWith('127.0.0.1')) {
         return NextResponse.json({ 
             message: 'Cannot set webhook for a local development server. Please deploy your application to a public URL first.' 
         }, { status: 400 });
     }
 
+    const appUrl = `${protocol}//${host}`;
     const webhookUrl = `${appUrl}/api/telegram`;
 
     try {
