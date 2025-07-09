@@ -113,9 +113,10 @@ function getStyleSelectionKeyboard() {
 
 async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
+    const trimmedText = text.trim();
 
     // --- Universal Cancel ---
-    if (text === '❌ Cancel' || text === '🔙 Back to Main Menu') {
+    if (trimmedText === '❌ Cancel' || trimmedText === '🔙 Back to Main Menu') {
         state.step = 'idle';
         state.urlBuffer = undefined;
         state.presetNameBuffer = undefined;
@@ -127,8 +128,8 @@ async function processIncomingMessage(chatId: string, text: string) {
     // --- State Machine ---
     switch(state.step) {
         case 'awaiting_url':
-            if (text.includes('tiktok.com')) {
-                state.urlBuffer = text;
+            if (trimmedText.includes('tiktok.com')) {
+                state.urlBuffer = trimmedText;
                 state.step = 'idle';
                 await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
             } else {
@@ -137,21 +138,21 @@ async function processIncomingMessage(chatId: string, text: string) {
             return;
 
         case 'awaiting_preset_name':
-            if (state.presets[text]) {
-                await sendMessage(chatId, `A preset named "${text}" already exists. Please choose a different name.`, getCancelKeyboard());
+            if (state.presets[trimmedText]) {
+                await sendMessage(chatId, `A preset named "${trimmedText}" already exists. Please choose a different name.`, getCancelKeyboard());
                 return;
             }
-            state.presetNameBuffer = text;
+            state.presetNameBuffer = trimmedText;
             state.step = 'awaiting_preset_style';
-            await sendMessage(chatId, `Great! Now, choose a watermark style for the "${text}" preset.`, getStyleSelectionKeyboard());
+            await sendMessage(chatId, `Great! Now, choose a watermark style for the "${trimmedText}" preset.`, getStyleSelectionKeyboard());
             return;
 
         case 'awaiting_preset_style':
-            if (!WATERMARK_STYLES.includes(text)) {
+            if (!WATERMARK_STYLES.includes(trimmedText)) {
                 await sendMessage(chatId, 'Invalid style. Please select one of the options from the keyboard.', getStyleSelectionKeyboard());
                 return;
             }
-            state.presetStyleBuffer = text;
+            state.presetStyleBuffer = trimmedText;
             state.step = 'awaiting_preset_text';
             await sendMessage(chatId, `Style selected! Now, what text should this watermark have?`, getCancelKeyboard());
             return;
@@ -159,7 +160,7 @@ async function processIncomingMessage(chatId: string, text: string) {
         case 'awaiting_preset_text':
             const presetName = state.presetNameBuffer;
             const presetStyle = state.presetStyleBuffer;
-            const presetText = text;
+            const presetText = trimmedText;
 
             if (!presetName || !presetStyle) {
                  state.step = 'idle';
@@ -176,30 +177,30 @@ async function processIncomingMessage(chatId: string, text: string) {
 
 
     // --- Idle State Command/Button Handling ---
-    if (text === '/start') {
+    if (trimmedText === '/start') {
         await sendMessage(chatId, 'Welcome! Use the menu below to get started.', getMainMenuKeyboard());
         return;
     }
 
-    if (text === '⬇️ Download Video') {
+    if (trimmedText === '⬇️ Download Video') {
         state.step = 'awaiting_url';
         await sendMessage(chatId, "Please send me the TikTok URL.", getCancelKeyboard());
         return;
     }
     
-    if (text === '🎨 Manage Presets') {
+    if (trimmedText === '🎨 Manage Presets') {
         await sendMessage(chatId, "Here you can create new presets.", getPresetManagementKeyboard());
         return;
     }
 
-    if (text === '➕ Create Preset') {
+    if (trimmedText === '➕ Create Preset') {
         state.step = 'awaiting_preset_name';
         await sendMessage(chatId, 'What would you like to name your new preset?', getCancelKeyboard());
         return;
     }
     
     // --- Post-URL Download Options ---
-    if (text === '💧 No Watermark') {
+    if (trimmedText === '💧 No Watermark') {
         if (!state.urlBuffer) {
              await sendMessage(chatId, "I don't have a URL to download. Please start again.", getMainMenuKeyboard());
              return;
@@ -210,8 +211,8 @@ async function processIncomingMessage(chatId: string, text: string) {
         return;
     }
     
-    if (text.startsWith(' preset: ')) {
-        const presetName = text.replace(' preset: ', '');
+    if (trimmedText.startsWith('preset:')) {
+        const presetName = trimmedText.replace('preset:', '').trim();
         const preset = state.presets[presetName];
         if (!state.urlBuffer || !preset) {
             await sendMessage(chatId, "Something went wrong. Please start again.", getMainMenuKeyboard());
@@ -225,8 +226,8 @@ async function processIncomingMessage(chatId: string, text: string) {
 
 
     // Fallback for any other text in idle state
-    if (text.includes('tiktok.com')) {
-        state.urlBuffer = text;
+    if (trimmedText.includes('tiktok.com')) {
+        state.urlBuffer = trimmedText;
         await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
     } else {
         await sendMessage(chatId, "I'm not sure what to do with that. Please use the menu below.", getMainMenuKeyboard());
@@ -314,5 +315,3 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: 'ok' });
 }
-
-    
