@@ -73,14 +73,14 @@ function getUserPresets(chatId: number): Map<string, string> {
 function buildMainMenuKeyboard(chatId: number) {
     const presets = getUserPresets(chatId);
     const presetButtons = Array.from(presets.keys()).map(presetName => (
-        [{ text: ` preset: ${presetName}`, callback_data: `preset:${presetName}` }]
+        [{ text: `🎨 ${presetName}`, callback_data: `preset:${presetName}` }]
     ));
 
     return {
         inline_keyboard: [
-            [{ text: '🎶 Download (No Watermark)', callback_data: 'download_no_watermark' }],
+            [{ text: '🎶 TikTok (No Watermark)', callback_data: 'download_no_watermark' }],
             ...presetButtons,
-            [{ text: '🎨 Create New Preset', callback_data: 'create_preset' }],
+            [{ text: '✨ Create New Preset', callback_data: 'create_preset' }],
         ],
     };
 }
@@ -88,12 +88,8 @@ function buildMainMenuKeyboard(chatId: number) {
 // --- Main Handlers ---
 
 async function handleStartCommand(chatId: number) {
-    const welcomeText = "Welcome to TeleVerse!\n\nSend me a TikTok URL to get started, or create a custom watermark preset.";
-    await sendMessage(chatId, welcomeText, {
-        inline_keyboard: [
-            [{ text: '🎨 Create New Preset', callback_data: 'create_preset' }],
-        ]
-    });
+    const welcomeText = "Welcome to TeleVerse!\n\nSend me a TikTok URL to get started. I'll ask you what to do with it.";
+    await sendMessage(chatId, welcomeText);
 }
 
 async function handleIncomingUrl(chatId: number, url: string) {
@@ -110,17 +106,20 @@ async function handleCallbackQuery(query: any) {
     const messageId = query.message.message_id;
     const data = query.data;
 
+    // Acknowledge the callback query immediately to remove the loading state from the button.
+    await apiRequest('answerCallbackQuery', { callback_query_id: query.id });
+
     const userInfo = userMessages.get(chatId);
     const url = userInfo?.lastUrl;
 
     if (data === 'create_preset') {
         userStates.set(chatId, { state: 'AWAITING_PRESET_NAME' });
-        await editMessageText(chatId, messageId, "Please enter a name for your new preset (e.g., 'MyLogo').");
+        await sendMessage(chatId, "What should I name this new preset? (e.g., 'MyBrand')");
         return;
     }
     
     if (!url) {
-        await editMessageText(chatId, messageId, "Sorry, I lost the URL. Please send it again.");
+        await editMessageText(chatId, messageId, "Whoops! I forgot which URL you sent. Please send it again.");
         return;
     }
 
@@ -172,12 +171,19 @@ async function handleCallbackQuery(query: any) {
     }
 }
 
-async function handleConversationalState(message: any) {
+async function handleConversationalState(message: any): Promise<boolean> {
     const chatId = message.chat.id;
     const text = message.text;
     const userState = userStates.get(chatId);
 
     if (!userState) return false;
+
+    // If user sends a command, cancel the current state and let the command handler take over.
+    if (text.startsWith('/')) {
+        userStates.delete(chatId);
+        await sendMessage(chatId, "Action cancelled.");
+        return false; // Let the command handler process the command
+    }
 
     if (userState.state === 'AWAITING_PRESET_NAME') {
         const presetName = text.trim();
@@ -227,10 +233,12 @@ export async function POST(request: Request) {
             const chatId = message.chat.id;
             const text = message.text || '';
 
+            // If a conversational state is active, handle it and stop further processing.
             if (await handleConversationalState(message)) {
                 return NextResponse.json({ status: 'ok' });
             }
 
+            // Handle regular commands and messages
             if (text.startsWith('/start')) {
                 await handleStartCommand(chatId);
             } else if (text.match(/https?:\/\/(?:www\.)?tiktok\.com/)) {
