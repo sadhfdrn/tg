@@ -1,6 +1,8 @@
-<svg width="500" height="100" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="500" height="100" fill="none"/>
-    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="monospace" font-size="40" fill="#39FF14" stroke="black" stroke-width="1" letter-spacing="4">
-        &lt;TEXT_PLACEHOLDER/&gt;
-    </text>
+<svg width="300" height="50" xmlns="http://www.w3.org/2000/svg">
+    <g opacity="0.4">
+        <path d="M0 25 Q 150 -25 300 25 Q 150 75 0 25" fill="#FFD700"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Georgia, serif" font-size="18" fill="#333333">
+            TEXT_PLACEHOLDER
+        </text>
+    </g>
 </svg>

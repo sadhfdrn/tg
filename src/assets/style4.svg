@@ -1,4 +1,8 @@
-<svg width="500" height="100" xmlns="http://www.w3.org/2000/svg">
-    <path d="M 0 50 L 50 0 H 450 L 500 50 L 450 100 H 50 Z" fill="#1E90FF" stroke="white" stroke-width="3" fill-opacity="0.8"/>
-    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Impact, Charcoal, sans-serif" font-size="35" fill="white" stroke="black" stroke-width="1.5">TEXT_PLACEHOLDER</text>
+<svg width="300" height="50" xmlns="http://www.w3.org/2000/svg">
+    <g opacity="0.4">
+        <rect x="0" y="0" width="300" height="50" fill="none" stroke="#00FFFF" stroke-width="2" stroke-dasharray="10 5"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="22" font-weight="bold" fill="#00FFFF">
+            TEXT_PLACEHOLDER
+        </text>
+    </g>
 </svg>

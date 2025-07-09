@@ -1,21 +1,16 @@
-<svg width="500" height="100" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      .neon-text {
-        font-family: 'Brush Script MT', cursive;
-        font-size: 45px;
-        fill: #fff;
-        text-shadow:
-          0 0 5px #fff,
-          0 0 10px #fff,
-          0 0 20px #ff00de,
-          0 0 30px #ff00de,
-          0 0 40px #ff00de,
-          0 0 55px #ff00de,
-          0 0 75px #ff00de;
-      }
-    </style>
-  </defs>
-  <rect x="0" y="0" width="500" height="100" fill="rgba(0,0,0,0.5)"/>
-  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" class="neon-text">TEXT_PLACEHOLDER</text>
+<svg width="300" height="60" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+            <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    <g opacity="0.4">
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'Brush Script MT', cursive" font-size="30" fill="#FF00FF" style="filter: url(#neon-glow); text-shadow: 0 0 5px #FF00FF, 0 0 10px #FF00FF;">
+            TEXT_PLACEHOLDER
+        </text>
+    </g>
 </svg>

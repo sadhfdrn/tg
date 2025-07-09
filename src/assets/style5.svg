@@ -1,11 +1,7 @@
-<svg width="500" height="100" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <pattern id="pinstripe" patternUnits="userSpaceOnUse" width="10" height="10">
-      <path d="M-1,1 l2,-2 M0,10 l10,-10 M9,11 l2,-2" stroke="#FFFFFF" stroke-width="1" />
-    </pattern>
-  </defs>
-  <rect x="0" y="0" width="500" height="100" fill="#D2B48C"/>
-  <rect x="0" y="0" width="500" height="100" fill="url(#pinstripe)" fill-opacity="0.2"/>
-  <rect x="10" y="10" width="480" height="80" fill="rgba(0,0,0,0.4)" rx="5"/>
-  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-family="Garamond, serif" font-size="40" fill="#FFFFFF" font-style="italic">TEXT_PLACEHOLDER</text>
+<svg width="300" height="50" xmlns="http://www.w3.org/2000/svg">
+    <g opacity="0.4">
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'Impact', sans-serif" font-size="32" fill="#E5E5E5" stroke="#000000" stroke-width="1">
+            TEXT_PLACEHOLDER
+        </text>
+    </g>
 </svg>
