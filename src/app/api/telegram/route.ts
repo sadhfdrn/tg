@@ -47,9 +47,45 @@ async function sendTypingAction(chatId: string | number) {
     }
 }
 
-async function sendMessage(chatId: string | number, text: string, reply_markup?: any) {
+async function sendMessage(chatId: string | number, text: string, reply_markup?: any): Promise<number | null> {
     await sendTypingAction(chatId);
-    return axios.post(`${TELEGRAM_API_URL}/sendMessage`, { chat_id: chatId, text, parse_mode: 'Markdown', reply_markup });
+    try {
+        const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, { chat_id: chatId, text, parse_mode: 'Markdown', reply_markup });
+        if (response.data.ok && response.data.result) {
+            return response.data.result.message_id;
+        }
+    } catch (error) {
+        console.error('Failed to send message:', error);
+    }
+    return null;
+}
+
+async function editMessage(chatId: string | number, messageId: number, text: string) {
+    try {
+        await axios.post(`${TELEGRAM_API_URL}/editMessageText`, {
+            chat_id: chatId,
+            message_id: messageId,
+            text: text,
+            parse_mode: 'Markdown'
+        });
+    } catch (error) {
+        // Don't log "message is not modified" errors, as they are common and not critical.
+        const errorResponse = (error as any).response?.data?.description;
+        if (!errorResponse || !errorResponse.includes('message is not modified')) {
+            console.error('Failed to edit message:', errorResponse || (error as Error).message);
+        }
+    }
+}
+
+async function deleteMessage(chatId: string | number, messageId: number) {
+    try {
+        await axios.post(`${TELEGRAM_API_URL}/deleteMessage`, {
+            chat_id: chatId,
+            message_id: messageId,
+        });
+    } catch (error) {
+        console.error('Failed to delete message:', error);
+    }
 }
 
 // --- Keyboards ---
@@ -221,12 +257,10 @@ async function processIncomingMessage(chatId: string, text: string) {
                 return;
             }
             if (trimmedText === '💧 No Watermark') {
-                await sendMessage(chatId, "Processing your video without a watermark...", getMainMenuKeyboard());
                 await processAndSendMedia(chatId, state.urlBuffer);
                 state.urlBuffer = undefined;
                 state.step = 'idle';
             } else if (preset) {
-                await sendMessage(chatId, `Processing with your "${trimmedText}" preset...`, getMainMenuKeyboard());
                 await processAndSendMedia(chatId, state.urlBuffer, preset.text, preset.style, preset.position);
                 state.urlBuffer = undefined;
                 state.step = 'idle';
@@ -346,6 +380,20 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
     const state = getUserState(chatId);
     state.step = 'idle'; // Reset state after starting processing
     
+    const statusMessageId = await sendMessage(chatId, '⏳ Starting up...', getMainMenuKeyboard());
+    if (!statusMessageId) {
+        await sendMessage(chatId, 'Could not start the process. Please try again.', getMainMenuKeyboard());
+        return;
+    }
+
+    const onProgress = async (progress: { message: string, percentage?: number }) => {
+        let text = `⏳ ${progress.message}`;
+        if (progress.percentage !== undefined) {
+            text += ` ${progress.percentage.toFixed(0)}%`;
+        }
+        await editMessage(chatId, statusMessageId, text);
+    };
+
     let command = '/tiktok';
     if(watermarkText && watermarkStyle && watermarkPosition) {
         command = `/tiktok-wm ${url} ${watermarkStyle} ${watermarkPosition} ${watermarkText}`;
@@ -354,15 +402,16 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
     }
 
     try {
-        const response = await handleMessage(command);
+        const response = await handleMessage(command, onProgress);
 
         if (response.text && (!response.media || response.media.length === 0)) {
-            await sendMessage(chatId, response.text, getMainMenuKeyboard());
+            await editMessage(chatId, statusMessageId, `⚠️ ${response.text}`);
             return;
         }
 
         if (response.media && response.media.length > 0) {
-            await sendMessage(chatId, `Found ${response.media.length} media file(s). Sending now...`, getMainMenuKeyboard());
+            await editMessage(chatId, statusMessageId, `✅ Found ${response.media.length} media file(s). Sending now...`);
+
             for (const item of response.media) {
                 const form = new FormData();
                 form.append('chat_id', String(chatId));
@@ -384,15 +433,18 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
                     await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
                 }
             }
+             await deleteMessage(chatId, statusMessageId);
         }
     } catch(error: any) {
         console.error("Error processing and sending media:", error);
-         if (axios.isAxiosError(error) && error.response) {
+        let errorMessage = "An unexpected error occurred while processing your request.";
+        if (axios.isAxiosError(error) && error.response) {
             console.error("Telegram API Error Response:", error.response.data);
-            await sendMessage(chatId, `Failed to send media: ${error.response.data.description}`, getMainMenuKeyboard());
+            errorMessage = `Failed to send media: ${error.response.data.description}`;
         } else {
-            await sendMessage(chatId, "An unexpected error occurred while sending your file. It might be too large or processing failed.", getMainMenuKeyboard());
+            errorMessage = `An unexpected error occurred: ${error.message}`;
         }
+        await editMessage(chatId, statusMessageId, `❌ ${errorMessage}`);
     }
 }
 

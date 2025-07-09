@@ -38,7 +38,10 @@ export async function sendMessageToUser(formData: FormData): Promise<{ success: 
   }
 }
 
-export async function handleMessage(message: string): Promise<{
+export async function handleMessage(
+    message: string,
+    onProgress?: (progress: { message: string, percentage?: number }) => Promise<void>
+  ): Promise<{
   text?: string;
   media?: { type: 'video' | 'image', url: string, caption: string }[]
 }> {
@@ -58,7 +61,7 @@ export async function handleMessage(message: string): Promise<{
 
   const processAndFormatMedia = async (url: string, watermarkStyle?: string, watermarkPosition?: string, watermarkText?: string) => {
     try {
-      const processedMedia = await processTikTokUrl(url, watermarkText, watermarkStyle, watermarkPosition as any);
+      const processedMedia = await processTikTokUrl(url, onProgress, watermarkText, watermarkStyle, watermarkPosition as any);
       if (processedMedia.length === 0) {
         return { text: 'Could not process the TikTok video. It might be private, deleted, or the URL is invalid.' };
       }
@@ -113,5 +116,3 @@ export async function handleMessage(message: string): Promise<{
     text: "I don't understand that command. Try `/tiktok <url>` or `/tiktok-wm <url> <style.svg> <position> <text>`."
   }
 }
-
-    

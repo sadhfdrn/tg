@@ -10,6 +10,7 @@ import tiktokdl from '@tobyg74/tiktok-api-dl';
 import sharp from 'sharp';
 
 type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
+type ProgressCallback = (progress: { message: string, percentage?: number }) => Promise<void>;
 
 const userAgents = [
     'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
@@ -99,9 +100,10 @@ async function downloadSingleFile(url: string, filename: string): Promise<string
     });
 }
 
-async function downloadMediaFiles(mediaData: { type: 'video' | 'image', url: string, index: number }[], method = 'unknown'): Promise<{ path: string, type: 'video' | 'image', index: number }[]> {
+async function downloadMediaFiles(mediaData: { type: 'video' | 'image', url: string, index: number }[], onProgress?: ProgressCallback, method = 'unknown'): Promise<{ path: string, type: 'video' | 'image', index: number }[]> {
     const downloadedFiles: { path: string, type: 'video' | 'image', index: number }[] = [];
-    for (const media of mediaData) {
+    for (const [i, media] of mediaData.entries()) {
+        if(onProgress) await onProgress({ message: `Downloading file ${i + 1} of ${mediaData.length}...`});
         const extension = media.type === 'video' ? 'mp4' : 'jpg';
         const filePath = await downloadSingleFile(media.url, `${method}_${Date.now()}_${media.type}_${media.index}.${extension}`);
         downloadedFiles.push({ path: filePath, type: media.type, index: media.index });
@@ -109,7 +111,8 @@ async function downloadMediaFiles(mediaData: { type: 'video' | 'image', url: str
     return downloadedFiles;
 }
 
-async function downloadWithTobyAPI(url: string, cookie: string) {
+async function downloadWithTobyAPI(url: string, cookie: string, onProgress?: ProgressCallback) {
+    if(onProgress) await onProgress({ message: 'Attempting primary API...' });
     const versions = ['v3', 'v1'];
     for (const version of versions) {
         try {
@@ -117,7 +120,7 @@ async function downloadWithTobyAPI(url: string, cookie: string) {
             if (result.status === 'success' && result.result) {
                  const mediaData = await extractMediaData(result.result);
                 if (mediaData.length === 0) continue;
-                return downloadMediaFiles(mediaData, `toby_api_${version}`);
+                return downloadMediaFiles(mediaData, onProgress, `toby_api_${version}`);
             }
         } catch(e) {
              console.log(`Toby API ${version} failed: ${(e as Error).message}`);
@@ -127,7 +130,8 @@ async function downloadWithTobyAPI(url: string, cookie: string) {
 }
 
 
-async function downloadWithAlternativeAPI(url: string) {
+async function downloadWithAlternativeAPI(url: string, onProgress?: ProgressCallback) {
+    if(onProgress) await onProgress({ message: 'Attempting fallback API...' });
     const endpoint = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`;
     const response = await axios.get(endpoint, {
         timeout: 15000,
@@ -140,17 +144,17 @@ async function downloadWithAlternativeAPI(url: string) {
         if (data.images && Array.isArray(data.images)) {
             data.images.forEach((imageUrl: string, index: number) => mediaData.push({ type: 'image', url: imageUrl, index }));
         }
-        if (mediaData.length > 0) return downloadMediaFiles(mediaData, 'alternative_api');
+        if (mediaData.length > 0) return downloadMediaFiles(mediaData, onProgress, 'alternative_api');
     }
     throw new Error('Alternative API failed');
 }
 
-async function downloadTikTokMedia(url: string) {
+async function downloadTikTokMedia(url: string, onProgress?: ProgressCallback) {
     const cookie = parseCookie(process.env.TIKTOK_COOKIE || '');
     
     const methods = [
-        () => downloadWithTobyAPI(url, cookie), 
-        () => downloadWithAlternativeAPI(url)
+        () => downloadWithTobyAPI(url, cookie, onProgress), 
+        () => downloadWithAlternativeAPI(url, onProgress)
     ];
 
     for (const method of methods) {
@@ -188,8 +192,9 @@ function getFfmpegOverlay(position: WatermarkPosition = 'bottom-right'): string 
     }
 }
 
-async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition): Promise<string> {
+async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition, onProgress?: ProgressCallback): Promise<string> {
     await promisify(exec)('ffmpeg -version').catch(() => { throw new Error('FFmpeg not found! Please install FFmpeg.') });
+    if(onProgress) await onProgress({ message: 'Preparing watermark...' });
     
     const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
     const watermarkPngPath = path.join(tempDir, `watermark_${Date.now()}.png`);
@@ -209,7 +214,13 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
             .complexFilter(`[1:v]scale=iw*0.25:-1[wm];[0:v][wm]${overlayCommand}`)
             .outputOptions(['-c:v libx264', '-preset fast', '-crf 23', '-c:a copy'])
             .output(outputPath)
+            .on('progress', (progress) => {
+                if (onProgress && progress.percent) {
+                    onProgress({ message: 'Applying watermark...', percentage: progress.percent });
+                }
+            })
             .on('end', () => {
+                if(onProgress) onProgress({ message: 'Applying watermark...', percentage: 100 });
                 try { fs.unlinkSync(watermarkPngPath); } catch (e) { console.error("Could not clean up watermark png", e) }
                 resolve(outputPath);
             })
@@ -234,7 +245,8 @@ function getSharpGravity(position: WatermarkPosition = 'bottom-right'): sharp.Gr
     }
 }
 
-async function addWatermarkToImage(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition): Promise<string> {
+async function addWatermarkToImage(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition, onProgress?: ProgressCallback): Promise<string> {
+    if(onProgress) await onProgress({ message: 'Applying watermark to image...' });
     const imageBuffer = await fs.promises.readFile(inputPath);
     const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
 
@@ -255,19 +267,28 @@ async function addWatermarkToImage(inputPath: string, outputPath: string, waterm
         }])
         .jpeg({ quality: 90 })
         .toFile(outputPath);
-
+    
+    if(onProgress) await onProgress({ message: 'Applying watermark to image...', percentage: 100 });
     return outputPath;
 }
 
-async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'image', index: number }[], watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition) {
+async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'image', index: number }[], onProgress: ProgressCallback | undefined, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition) {
     const processedFiles: { path: string, type: 'video' | 'image', index: number, originalPath: string }[] = [];
-    for (const mediaFile of mediaFiles) {
+    for (const [i, mediaFile] of mediaFiles.entries()) {
         const outputPath = path.join(tempDir, `watermarked_${path.basename(mediaFile.path)}`);
+        
+        const singleFileProgress: ProgressCallback | undefined = onProgress 
+            ? async (progress) => {
+                const baseMessage = `Processing file ${i + 1} of ${mediaFiles.length}: ${progress.message}`;
+                await onProgress({ message: baseMessage, percentage: progress.percentage });
+              }
+            : undefined;
+
         try {
             if (mediaFile.type === 'video') {
-                await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition);
+                await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition, singleFileProgress);
             } else {
-                await addWatermarkToImage(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition);
+                await addWatermarkToImage(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition, singleFileProgress);
             }
             processedFiles.push({ path: outputPath, type: mediaFile.type, index: mediaFile.index, originalPath: mediaFile.path });
         } catch (error) {
@@ -279,8 +300,10 @@ async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'im
     return processedFiles;
 }
 
-export async function processTikTokUrl(url: string, watermarkText?: string, watermarkStyle?: string, watermarkPosition?: WatermarkPosition): Promise<{ path: string, originalPath: string, type: 'video' | 'image', caption: string }[]> {
-    const mediaFiles = await downloadTikTokMedia(url);
+export async function processTikTokUrl(url: string, onProgress?: ProgressCallback, watermarkText?: string, watermarkStyle?: string, watermarkPosition?: WatermarkPosition): Promise<{ path: string, originalPath: string, type: 'video' | 'image', caption: string }[]> {
+    const mediaFiles = await downloadTikTokMedia(url, onProgress);
+    if(onProgress) await onProgress({ message: 'Download complete.' });
+
 
     if (!watermarkText || !watermarkStyle || !watermarkPosition) {
         return mediaFiles.map(file => ({
@@ -291,7 +314,7 @@ export async function processTikTokUrl(url: string, watermarkText?: string, wate
         }));
     }
     
-    const processedFiles = await processMediaFiles(mediaFiles, watermarkText, watermarkStyle, watermarkPosition);
+    const processedFiles = await processMediaFiles(mediaFiles, onProgress, watermarkText, watermarkStyle, watermarkPosition);
 
     const results = processedFiles.map(file => ({
         path: file.path,
