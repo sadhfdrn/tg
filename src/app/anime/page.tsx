@@ -198,7 +198,7 @@ export default function AnimeDownloaderPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                     {results.map((anime) => (
                     <Card key={anime.id} className="overflow-hidden cursor-pointer hover:shadow-lg hover:border-primary transition-all" onClick={() => handleSelectAnime(anime)}>
-                        <Image src={`/api/image-proxy?url=${encodeURIComponent(anime.poster)}`} alt={anime.title} width={200} height={300} className="w-full h-auto object-cover" />
+                        <Image src={anime.poster} alt={anime.title} width={200} height={300} className="w-full h-auto object-cover" />
                         <div className="p-2">
                             <p className="font-semibold text-sm truncate">{anime.title}</p>
                             <p className="text-xs text-muted-foreground">{anime.year} - {anime.status}</p>
@@ -214,5 +214,3 @@ export default function AnimeDownloaderPage() {
     </main>
   );
 }
-
-    
