@@ -28,10 +28,6 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
-      {
-        source: '/api/image-proxy',
-        destination: '/api/image-proxy',
-      },
        {
         source: "/api/anime-proxy",
         destination: "/api/anime-proxy",
