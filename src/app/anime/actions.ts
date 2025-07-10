@@ -1,83 +1,90 @@
 
 'use server';
 
-import { Meta, Anime } from 'hakai-extensions';
+import { HiAnime } from 'aniwatch-fork';
 
-const anilist = new Meta.Anilist();
-const hianime = new Anime.HiAnime();
+const hianime = new HiAnime.Scraper();
 
 export interface AnimeSearchResult {
     id: string;
-    title: string;
-    image: string;
-    releaseDate: string | null;
-    malId: number | null;
+    name: string;
+    poster: string;
+    sub: number;
+    dub: number;
+    type: string;
 }
 
 export interface AnimeDetails {
     id: string;
-    title: string;
-    image: string;
+    name: string;
+    poster: string;
     description: string;
-    status: string;
-    totalEpisodes: number;
-    releaseDate: number | null;
-    malId: number | null;
+    stats: {
+        type: string;
+        episodes: {
+            sub: number;
+            dub: number;
+        };
+        duration: string;
+        rating: string;
+    };
     episodes: {
-        id: string;
+        episodeId: string;
         number: number;
-        title: string | null;
+        title: string;
     }[];
 }
 
 export interface EpisodeSource {
     url: string;
-    quality: string;
+    quality?: string;
 }
 
 export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
     try {
-        const data = await anilist.search(query);
-        return data.results.map((item: any) => ({
+        const data = await hianime.search(query);
+        return data.animes.map((item: any) => ({
             id: item.id,
-            title: item.title.romaji || item.title.english || item.title.native,
-            image: item.image,
-            releaseDate: item.releaseDate,
-            malId: item.malId,
+            name: item.name,
+            poster: item.poster,
+            sub: item.episodes.sub,
+            dub: item.episodes.dub,
+            type: item.type,
         }));
     } catch (error) {
-        console.error("Error searching anime with hakai-extensions:", error);
+        console.error("Error searching anime with aniwatch-fork:", error);
         return [];
     }
 }
 
 export async function getAnimeDetails(animeId: string): Promise<AnimeDetails | null> {
     try {
-        const data = await anilist.fetchAnimeInfo(animeId);
+        const [details, episodesData] = await Promise.all([
+            hianime.getInfo(animeId),
+            hianime.getEpisodes(animeId)
+        ]);
+
         return {
-            id: data.id,
-            title: data.title.romaji || data.title.english || data.title.native,
-            image: data.image,
-            description: data.description,
-            status: data.status,
-            totalEpisodes: data.totalEpisodes,
-            releaseDate: data.releaseDate,
-            malId: data.malId,
-            episodes: data.episodes.map((ep: any) => ({
-                id: ep.id,
+            id: details.anime.info.id,
+            name: details.anime.info.name,
+            poster: details.anime.info.poster,
+            description: details.anime.info.description,
+            stats: details.anime.info.stats,
+            episodes: episodesData.episodes.map((ep: any) => ({
+                episodeId: ep.episodeId,
                 number: ep.number,
                 title: ep.title,
             })),
         };
     } catch (error) {
-        console.error("Error getting anime details with hakai-extensions:", error);
+        console.error("Error getting anime details with aniwatch-fork:", error);
         return null;
     }
 }
 
-export async function getEpisodeSources(episodeId: string): Promise<EpisodeSource[]> {
-    try {
-        const data = await hianime.fetchEpisodeSources(episodeId);
+export async function getEpisodeSources(episodeId: string, category: 'sub' | 'dub'): Promise<EpisodeSource[]> {
+     try {
+        const data = await hianime.getEpisodeSources(episodeId, "vidstreaming", category);
 
         if (!data.sources || data.sources.length === 0) {
             return [];
@@ -91,7 +98,7 @@ export async function getEpisodeSources(episodeId: string): Promise<EpisodeSourc
         }));
 
     } catch (error) {
-        console.error("Error getting episode sources with hakai-extensions:", error);
+        console.error("Error getting episode sources with aniwatch-fork:", error);
         return [];
     }
 }
