@@ -60,6 +60,10 @@ const nextConfig: NextConfig = {
         ]
       })
     }
+
+    // This is to fix the "Module not found: Can't resolve" error with browserslist
+    config.resolve.alias['caniuse-lite'] = require.resolve('caniuse-lite');
+
     return config
   }
 };
