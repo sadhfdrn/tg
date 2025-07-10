@@ -1,7 +1,7 @@
 
 'use server';
 
-const CONSUMET_API_URL = process.env.CONSUMET_API_URL || 'https://anime-two-hazel.vercel.app';
+const CONSUMET_API_URL = 'https://anime-two-hazel.vercel.app';
 
 export interface AnimeSearchResult {
     id: string;
@@ -38,7 +38,8 @@ export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
         const data = await response.json();
-        return data.results;
+        // The API response for animepahe search doesn't include 'type', so we add a default.
+        return data.results.map((item: any) => ({ ...item, type: 'N/A' }));
     } catch (error) {
         console.error("Error searching anime:", error);
         return [];
