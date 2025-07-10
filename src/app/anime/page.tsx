@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -12,7 +13,7 @@ import {
 } from './actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader, Search, Film, Download, ArrowLeft } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +29,7 @@ export default function AnimePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
 
   const { toast } = useToast();
 
@@ -58,6 +60,7 @@ export default function AnimePage() {
     setDetailsLoading(true);
     setSelectedAnime(null);
     setEpisodeSources([]);
+    setSelectedEpisodeId(null);
     
     try {
       const details = await getAnimeDetails(animeId);
@@ -71,6 +74,7 @@ export default function AnimePage() {
   };
 
   const handleGetSources = async (episodeId: string) => {
+    setSelectedEpisodeId(episodeId);
     setSourcesLoading(true);
     setEpisodeSources([]);
 
@@ -139,7 +143,7 @@ export default function AnimePage() {
                     <div className="flex flex-col justify-center">
                       <h3 className="font-semibold">{anime.title}</h3>
                       <p className="text-sm text-muted-foreground">{anime.releaseDate}</p>
-                      <Badge variant="outline" className="mt-2 w-fit">{anime.subOrDub}</Badge>
+                      <Badge variant="outline" className="mt-2 w-fit">{anime.type}</Badge>
                     </div>
                   </Card>
                 ))}
@@ -168,9 +172,6 @@ export default function AnimePage() {
                                 className="rounded-lg object-cover self-center shadow-lg"
                                 />
                             <h2 className="text-2xl font-bold text-center">{selectedAnime.title}</h2>
-                            <div className="flex gap-2 flex-wrap justify-center">
-                                {selectedAnime.genres.map(genre => <Badge key={genre}>{genre}</Badge>)}
-                            </div>
                             <p className="text-sm text-muted-foreground">{selectedAnime.description}</p>
                             
                             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -178,10 +179,10 @@ export default function AnimePage() {
                                 <p><strong>Episodes:</strong> {selectedAnime.totalEpisodes}</p>
                             </div>
                             
-                            <h3 className="font-semibold mt-4">Episodes</h3>
+                            <h3 className="font-semibold mt-4">Episodes (Session: {selectedAnime.episodes[0]?.session})</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {selectedAnime.episodes.map(ep => (
-                                    <Button key={ep.id} variant="outline" onClick={() => handleGetSources(ep.id)}>
+                                    <Button key={ep.id} variant={selectedEpisodeId === ep.id ? "default" : "outline"} onClick={() => handleGetSources(ep.id)}>
                                         Episode {ep.number}
                                     </Button>
                                 ))}
@@ -195,7 +196,7 @@ export default function AnimePage() {
                                     {episodeSources.map(source => (
                                         <a href={source.url} key={source.url} target="_blank" rel="noopener noreferrer">
                                             <Button variant="secondary" className="w-full justify-between">
-                                                <span>{source.quality} {source.isM3U8 ? '(HLS Stream)' : '(MP4)'}</span>
+                                                <span>{source.quality} (MP4)</span>
                                                 <Download />
                                             </Button>
                                         </a>

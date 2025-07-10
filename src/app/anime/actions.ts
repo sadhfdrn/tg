@@ -1,13 +1,14 @@
+
 'use server';
 
-const CONSUMET_API_URL = process.env.CONSUMET_API_URL || 'https://api.consumet.org';
+const CONSUMET_API_URL = process.env.CONSUMET_API_URL || 'https://anime-two-hazel.vercel.app';
 
 export interface AnimeSearchResult {
     id: string;
     title: string;
     image: string;
     releaseDate: string;
-    subOrDub: string;
+    type: string;
 }
 
 export interface AnimeDetails {
@@ -15,26 +16,24 @@ export interface AnimeDetails {
     title: string;
     image: string;
     description: string;
-    genres: string[];
     status: string;
     totalEpisodes: number;
-    subOrDub: string;
     episodes: {
         id: string;
         number: number;
+        session: string;
         url: string;
     }[];
 }
 
 export interface EpisodeSource {
     url: string;
-    isM3U8: boolean;
     quality: string;
 }
 
 export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
     try {
-        const response = await fetch(`${CONSUMET_API_URL}/anime/gogoanime/${encodeURIComponent(query)}`);
+        const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/${encodeURIComponent(query)}`);
         if (!response.ok) {
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
@@ -48,7 +47,7 @@ export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
 
 export async function getAnimeDetails(animeId: string): Promise<AnimeDetails | null> {
     try {
-        const response = await fetch(`${CONSUMET_API_URL}/anime/gogoanime/info/${animeId}`);
+        const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/info/${animeId}`);
         if (!response.ok) {
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
@@ -62,7 +61,7 @@ export async function getAnimeDetails(animeId: string): Promise<AnimeDetails | n
 
 export async function getEpisodeSources(episodeId: string): Promise<EpisodeSource[]> {
     try {
-        const response = await fetch(`${CONSUMET_API_URL}/anime/gogoanime/watch/${episodeId}`);
+        const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/watch/${episodeId}`);
         if (!response.ok) {
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
