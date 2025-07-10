@@ -56,8 +56,12 @@ const nextConfig: NextConfig = {
         ]
       })
     }
-
+    
     // This is to fix the "Module not found: Can't resolve" error with browserslist
+    // The error comes from a dynamic require in the browserslist dependency.
+    config.externals = [...config.externals, {
+      './browserslist-stats.json': 'commonjs ./browserslist-stats.json'
+    }]
     config.resolve.alias['caniuse-lite'] = require.resolve('caniuse-lite');
 
     return config
