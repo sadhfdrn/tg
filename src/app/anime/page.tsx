@@ -45,6 +45,8 @@ type DownloadLink = {
 export default function AnimeDownloaderPage() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [loadingLinks, setLoadingLinks] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedAnime, setSelectedAnime] = useState<SearchResult | null>(null);
   const [details, setDetails] = useState<AnimeDetails | null>(null);
@@ -75,7 +77,7 @@ export default function AnimeDownloaderPage() {
 
   const handleSelectAnime = async (anime: SearchResult) => {
     setSelectedAnime(anime);
-    setLoading(true);
+    setLoadingDetails(true);
     setDetails(null);
     setDownloadLinks([]);
     
@@ -84,16 +86,23 @@ export default function AnimeDownloaderPage() {
         setDetails(detailsResponse.data);
     } else {
         toast({ title: 'Failed to get details', description: detailsResponse.error, variant: 'destructive' });
+        setSelectedAnime(null); // Go back if details fail
     }
-
-    const seasonResponse = await getAnimeSeason(anime.id);
-    if(seasonResponse.success){
-        setDownloadLinks(seasonResponse.data);
-    } else {
-        toast({ title: 'Failed to get download links', description: seasonResponse.error, variant: 'destructive' });
-    }
-    setLoading(false);
+    setLoadingDetails(false);
   };
+
+  const handleGetDownloadLinks = async () => {
+      if (!selectedAnime) return;
+      setLoadingLinks(true);
+      setDownloadLinks([]);
+      const seasonResponse = await getAnimeSeason(selectedAnime.id);
+      if(seasonResponse.success){
+          setDownloadLinks(seasonResponse.data);
+      } else {
+          toast({ title: 'Failed to get download links', description: seasonResponse.error, variant: 'destructive' });
+      }
+      setLoadingLinks(false);
+  }
 
   const handleBackToSearch = () => {
     setSelectedAnime(null);
@@ -122,56 +131,70 @@ export default function AnimeDownloaderPage() {
             </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-            {selectedAnime && details ? (
+            {selectedAnime ? (
                  <div>
                     <Button onClick={handleBackToSearch} variant="outline" className="mb-4">
                         <ArrowLeft className="mr-2"/> Back to Search Results
                     </Button>
-                    <div className="grid md:grid-cols-3 gap-6">
-                        <div className="md:col-span-1">
-                            <Image src={details.poster} alt={details.title} width={300} height={450} className="rounded-lg shadow-lg w-full" />
+                    
+                    {loadingDetails ? (
+                         <div className="text-center p-8">
+                            <Loader className="animate-spin mx-auto h-8 w-8 text-primary"/>
+                            <p className="text-muted-foreground mt-2">Fetching details...</p>
                         </div>
-                        <div className="md:col-span-2">
-                            <h2 className="text-3xl font-bold mb-2">{details.title}</h2>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <span className="text-sm bg-muted text-muted-foreground px-2 py-1 rounded-md">{details.year}</span>
-                                <span className="text-sm bg-muted text-muted-foreground px-2 py-1 rounded-md">{details.status}</span>
-                                <span className="text-sm bg-muted text-muted-foreground px-2 py-1 rounded-md">{details.episodes} episodes</span>
+                    ) : details && (
+                        <div className="grid md:grid-cols-3 gap-6">
+                            <div className="md:col-span-1">
+                                <Image src={details.poster} alt={details.title} width={300} height={450} className="rounded-lg shadow-lg w-full" />
                             </div>
-                            <p className="text-sm text-muted-foreground mb-4">{details.description}</p>
-                            <div className="mb-4">
-                                <h4 className="font-semibold mb-2">Genres</h4>
-                                <div className="flex flex-wrap gap-2">
-                                    {details.genres.map(g => <span key={g} className="text-xs bg-secondary text-secondary-foreground px-2 py-1 rounded-full">{g}</span>)}
+                            <div className="md:col-span-2">
+                                <h2 className="text-3xl font-bold mb-2">{details.title}</h2>
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    <span className="text-sm bg-muted text-muted-foreground px-2 py-1 rounded-md">{details.year}</span>
+                                    <span className="text-sm bg-muted text-muted-foreground px-2 py-1 rounded-md">{details.status}</span>
+                                    <span className="text-sm bg-muted text-muted-foreground px-2 py-1 rounded-md">{details.episodes} episodes</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-4">{details.description}</p>
+                                <div className="mb-4">
+                                    <h4 className="font-semibold mb-2">Genres</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {details.genres.map(g => <span key={g} className="text-xs bg-secondary text-secondary-foreground px-2 py-1 rounded-full">{g}</span>)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-semibold mb-2">Download Links</h3>
+                                    <Button onClick={handleGetDownloadLinks} disabled={loadingLinks}>
+                                        {loadingLinks ? <Loader className="animate-spin" /> : <Download />}
+                                        Load Links
+                                    </Button>
+
+                                    {loadingLinks && <div className="flex items-center gap-2 mt-4"><Loader className="animate-spin" /> <span>Loading links...</span></div>}
+                                    
+                                    {downloadLinks.length > 0 ? (
+                                        <Accordion type="single" collapsible className="w-full mt-4">
+                                            {downloadLinks.map((link, index) => (
+                                                <AccordionItem value={`item-${index}`} key={index}>
+                                                    <AccordionTrigger>Episode {link.episode} - {link.server} ({link.quality})</AccordionTrigger>
+                                                    <AccordionContent>
+                                                        <div className="flex items-center gap-2">
+                                                            <Input value={link.url} readOnly className="flex-grow"/>
+                                                            <Button asChild>
+                                                                <a href={link.url} target="_blank" rel="noopener noreferrer">
+                                                                    <Download/>
+                                                                </a>
+                                                            </Button>
+                                                        </div>
+                                                    </AccordionContent>
+                                                </AccordionItem>
+                                            ))}
+                                        </Accordion>
+                                    ) : !loadingLinks && (
+                                        <p className="text-muted-foreground mt-4">Click the button to load download links.</p>
+                                    )}
                                 </div>
                             </div>
-                             <div>
-                                <h3 className="text-xl font-semibold mb-2">Download Links</h3>
-                                {loading && <div className="flex items-center gap-2"><Loader className="animate-spin" /> <span>Loading links...</span></div>}
-                                {downloadLinks.length > 0 ? (
-                                    <Accordion type="single" collapsible className="w-full">
-                                        {downloadLinks.map((link, index) => (
-                                             <AccordionItem value={`item-${index}`} key={index}>
-                                                <AccordionTrigger>Episode {link.episode} - {link.server} ({link.quality})</AccordionTrigger>
-                                                <AccordionContent>
-                                                    <div className="flex items-center gap-2">
-                                                        <Input value={link.url} readOnly className="flex-grow"/>
-                                                        <Button asChild>
-                                                            <a href={link.url} target="_blank" rel="noopener noreferrer">
-                                                                <Download/>
-                                                            </a>
-                                                        </Button>
-                                                    </div>
-                                                </AccordionContent>
-                                            </AccordionItem>
-                                        ))}
-                                    </Accordion>
-                                ) : !loading && (
-                                    <p className="text-muted-foreground">No download links found.</p>
-                                )}
-                            </div>
                         </div>
-                    </div>
+                    )}
                  </div>
             ) : (
                 <>
@@ -201,7 +224,7 @@ export default function AnimeDownloaderPage() {
                         <Image src={anime.poster} alt={anime.title} width={200} height={300} className="w-full h-auto object-cover" />
                         <div className="p-2">
                             <p className="font-semibold text-sm truncate">{anime.title}</p>
-                            <p className="text-xs text-muted-foreground">{anime.year} - {anime.status}</p>
+                            <p className="text-xs text-muted-foreground">{anime.year} - {anime.type}</p>
                         </div>
                     </Card>
                     ))}

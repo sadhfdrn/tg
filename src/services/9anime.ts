@@ -255,8 +255,9 @@ class Enhanced9AnimePlugin {
                 
                 const infoItems: Record<string, string> = {};
                 document.querySelectorAll('.anisc-info .item-head').forEach(itemHead => {
-                    const key = itemHead?.textContent?.trim().toLowerCase() || '';
-                    const value = itemHead.nextElementSibling?.textContent?.trim() || '';
+                    const key = itemHead?.textContent?.trim().toLowerCase().replace(':', '') || '';
+                    const valueContainer = itemHead.nextElementSibling;
+                    const value = valueContainer?.textContent?.trim() || '';
                     if (key) infoItems[key] = value;
                 });
                 
@@ -266,12 +267,12 @@ class Enhanced9AnimePlugin {
                     title,
                     description,
                     poster,
-                    year: infoItems['premiered:'] || 'N/A',
-                    status: infoItems['status:'] || 'Unknown',
+                    year: infoItems['premiered'] || 'N/A',
+                    status: infoItems['status'] || 'Unknown',
                     genres,
-                    episodes: infoItems['total episode:'] || 'N/A', // Updated selector key
-                    duration: infoItems['duration:'] || 'N/A',
-                    studio: infoItems['studios:'] || 'N/A',
+                    episodes: infoItems['total episode'] || 'N/A',
+                    duration: infoItems['duration'] || 'N/A',
+                    studio: infoItems['studios'] || 'N/A',
                     score: 'N/A' // Score is not consistently available
                 };
             });
@@ -455,5 +456,3 @@ class Enhanced9AnimePlugin {
 }
 
 export default Enhanced9AnimePlugin;
-
-    
