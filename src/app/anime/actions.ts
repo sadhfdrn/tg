@@ -1,7 +1,7 @@
 
 'use server';
 
-const CONSUMET_API_URL = 'https://anime-two-hazel.vercel.app';
+const CONSUMET_API_URL = 'https://consumet-api-ayh8.onrender.com';
 
 export interface AnimeSearchResult {
     id: string;
