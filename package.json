@@ -50,6 +50,7 @@
     "lucide-react": "^0.475.0",
     "next": "15.3.3",
     "patch-package": "^8.0.0",
+    "puppeteer": "^22.13.1",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -58,6 +59,7 @@
     "sharp": "^0.33.4",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "user-agents": "^1.1.303",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -71,3 +73,5 @@
     "typescript": "^5"
   }
 }
+
+    

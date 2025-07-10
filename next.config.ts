@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/image-proxy',
+        destination: '/api/image-proxy',
+      },
+    ]
+  },
   output: 'standalone',
   webpack: (config, { isServer }) => {
     if (isServer) {
@@ -46,3 +54,5 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+    
