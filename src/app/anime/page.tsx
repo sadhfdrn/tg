@@ -31,8 +31,7 @@ export default function AnimePage() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
-  const [sourceCategory, setSourceCategory] = useState<'sub' | 'dub'>('sub');
-
+  
   const { toast } = useToast();
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -81,10 +80,10 @@ export default function AnimePage() {
     setEpisodeSources([]);
 
     try {
-      const sources = await getEpisodeSources(episodeId, sourceCategory);
+      const sources = await getEpisodeSources(episodeId);
       setEpisodeSources(sources);
       if (sources.length === 0) {
-         toast({ title: 'No Links Found', description: `Could not find ${sourceCategory} links for this episode.` });
+         toast({ title: 'No Links Found', description: `Could not find any links for this episode.` });
       }
     } catch (error) {
       console.error(error);
@@ -119,7 +118,7 @@ export default function AnimePage() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g., Naruto"
+                placeholder="e.g., Akame ga Kill!"
                 className="bg-muted/50"
               />
               <Button type="submit" disabled={searchLoading}>
@@ -136,18 +135,17 @@ export default function AnimePage() {
                     className="flex gap-4 p-3 hover:bg-muted/50 transition-colors cursor-pointer"
                   >
                     <Image
-                      src={anime.poster}
-                      alt={anime.name}
+                      src={anime.image}
+                      alt={anime.title}
                       width={80}
                       height={120}
                       className="rounded-md object-cover"
                     />
                     <div className="flex flex-col justify-center">
-                      <h3 className="font-semibold">{anime.name}</h3>
+                      <h3 className="font-semibold">{anime.title}</h3>
                       <div className="flex gap-2 mt-2">
-                        {anime.dub > 0 && <Badge variant="secondary">DUB: {anime.dub}</Badge>}
-                        {anime.sub > 0 && <Badge variant="secondary">SUB: {anime.sub}</Badge>}
-                        <Badge variant="outline" className="capitalize">{anime.type}</Badge>
+                          <Badge variant="secondary" className="capitalize">{anime.subOrDub}</Badge>
+                          <Badge variant="outline">{anime.releaseDate}</Badge>
                       </div>
                     </div>
                   </Card>
@@ -170,39 +168,33 @@ export default function AnimePage() {
                     <ScrollArea className="h-[70vh] pr-4">
                         <div className="flex flex-col gap-4">
                              <Image
-                                src={selectedAnime.poster}
-                                alt={selectedAnime.name}
+                                src={selectedAnime.image}
+                                alt={selectedAnime.title}
                                 width={150}
                                 height={220}
                                 className="rounded-lg object-cover self-center shadow-lg"
                                 />
-                            <h2 className="text-2xl font-bold text-center">{selectedAnime.name}</h2>
+                            <h2 className="text-2xl font-bold text-center">{selectedAnime.title}</h2>
                             <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: selectedAnime.description }} />
                             
+                            <div className="flex flex-wrap gap-2">
+                                {selectedAnime.genres.map(genre => <Badge key={genre} variant="secondary">{genre}</Badge>)}
+                            </div>
+                            
                             <div className="grid grid-cols-2 gap-2 text-sm">
-                                <p><strong>Rating:</strong> {selectedAnime.stats.rating}</p>
-                                <p><strong>Duration:</strong> {selectedAnime.stats.duration}</p>
-                                <p><strong>Type:</strong> {selectedAnime.stats.type}</p>
-                                <p><strong>Episodes:</strong> {selectedAnime.stats.episodes.dub ? `Dub: ${selectedAnime.stats.episodes.dub}` : ''} {selectedAnime.stats.episodes.sub ? `Sub: ${selectedAnime.stats.episodes.sub}` : ''}</p>
+                                <p><strong>Status:</strong> {selectedAnime.status}</p>
+                                <p><strong>Released:</strong> {selectedAnime.releaseDate}</p>
+                                <p><strong>Episodes:</strong> {selectedAnime.totalEpisodes}</p>
                             </div>
                             
                             <div className='flex items-center gap-4'>
                                 <h3 className="font-semibold mt-4">Episodes</h3>
-                                 <Select value={sourceCategory} onValueChange={(value) => setSourceCategory(value as 'sub' | 'dub')}>
-                                    <SelectTrigger className="w-[120px] mt-4">
-                                        <SelectValue placeholder="Select type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="sub">Subbed</SelectItem>
-                                        <SelectItem value="dub">Dubbed</SelectItem>
-                                    </SelectContent>
-                                </Select>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {selectedAnime.episodes.map(ep => (
-                                    <Button key={ep.episodeId} variant={selectedEpisodeId === ep.episodeId ? "default" : "outline"} onClick={() => handleGetSources(ep.episodeId)}>
-                                        {`Ep ${ep.number}: ${ep.title}`}
+                                    <Button key={ep.id} variant={selectedEpisodeId === ep.id ? "default" : "outline"} onClick={() => handleGetSources(ep.id)}>
+                                        {`Ep ${ep.number}${ep.title ? `: ${ep.title}` : ''}`}
                                     </Button>
                                 ))}
                             </div>

@@ -43,8 +43,6 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   webpack: (config, { isServer }) => {
     if (isServer) {
-      config.resolve.alias['@/assets'] = path.join(__dirname, 'src/assets');
-      
       // This is a workaround to make sure the assets are copied to the server build
       const assetsPath = path.join(__dirname, 'src', 'assets');
       config.module.rules.push({
@@ -62,6 +60,11 @@ const nextConfig: NextConfig = {
         ]
       })
     }
+    
+    // This is to fix the "Module not found: Can't resolve '...'" error with browserslist
+    config.externals.push({
+      'browserslist': 'browserslist',
+    });
 
     return config
   }
