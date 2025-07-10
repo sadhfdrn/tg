@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 
@@ -32,5 +33,4 @@ export async function GET(request: Request) {
     return new NextResponse('Failed to fetch image', { status: 500 });
   }
 }
-
     

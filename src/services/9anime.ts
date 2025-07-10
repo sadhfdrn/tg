@@ -36,13 +36,12 @@ export interface AnimeDetails {
     score: string;
 }
 
-export interface StreamingLink {
+export interface DownloadLink {
     server: string;
     url: string;
     quality: string;
     type: 'sub' | 'dub';
     episode: number;
-    priority: number;
 }
 
 export interface HealthCheckResult {
@@ -204,8 +203,11 @@ class Enhanced9AnimePlugin {
                 return items.map(item => {
                     const titleElement = item.querySelector('.film-name a');
                     const posterElement = item.querySelector('.film-poster img');
-                    const metaElements = item.querySelectorAll('.film-infor .fdi-item');
                     
+                    const infoDiv = item.querySelector('.film-detail .fd-infor');
+                    const year = infoDiv?.querySelector('.fdi-item:not(.fdi-duration):not(.fdi-type)')?.textContent?.trim() || 'N/A';
+                    const type = infoDiv?.querySelector('.fdi-type')?.textContent?.trim() || 'TV';
+
                     const url = titleElement?.getAttribute('href') || '';
                     
                     return {
@@ -213,9 +215,9 @@ class Enhanced9AnimePlugin {
                         url: url,
                         id: url.split('/').pop()?.split('?')[0] || '',
                         poster: posterElement?.getAttribute('data-src') || posterElement?.getAttribute('src') || '',
-                        year: metaElements[1]?.textContent?.trim() || 'N/A',
-                        status: metaElements[0]?.textContent?.trim() || 'Unknown',
-                        type: 'TV' // Assuming TV, can be refined if site provides it
+                        year: year,
+                        status: 'Unknown', // Status is not available on search page
+                        type: type
                     };
                 });
             });
@@ -252,13 +254,13 @@ class Enhanced9AnimePlugin {
                 const poster = document.querySelector('.anisc-poster .film-poster-img')?.getAttribute('src') || '';
                 
                 const infoItems: Record<string, string> = {};
-                document.querySelectorAll('.anisc-info .item').forEach(item => {
-                    const key = item.querySelector('.item-head')?.textContent?.trim().toLowerCase() || '';
-                    const value = item.querySelector('.name')?.textContent?.trim() || '';
+                document.querySelectorAll('.anisc-info .item-head').forEach(itemHead => {
+                    const key = itemHead?.textContent?.trim().toLowerCase() || '';
+                    const value = itemHead.nextElementSibling?.textContent?.trim() || '';
                     if (key) infoItems[key] = value;
                 });
-
-                const genres = Array.from(document.querySelectorAll('.anisc-info .item-list a')).map(el => el.textContent?.trim() || '').filter(Boolean);
+                
+                const genres = Array.from(document.querySelectorAll('.anisc-info .genres a')).map(el => el.textContent?.trim() || '').filter(Boolean);
 
                 return {
                     title,
@@ -267,7 +269,7 @@ class Enhanced9AnimePlugin {
                     year: infoItems['premiered:'] || 'N/A',
                     status: infoItems['status:'] || 'Unknown',
                     genres,
-                    episodes: infoItems['total episodes:'] || 'N/A',
+                    episodes: infoItems['total episode:'] || 'N/A', // Updated selector key
                     duration: infoItems['duration:'] || 'N/A',
                     studio: infoItems['studios:'] || 'N/A',
                     score: 'N/A' // Score is not consistently available
@@ -288,60 +290,73 @@ class Enhanced9AnimePlugin {
         }
     }
 
-    public async getStreamingLinks(animeId: string, episodeNumber: number, type: 'sub' | 'dub' = 'sub', retryCount = 0): Promise<StreamingLink[]> {
+    public async getStreamingLinks(animeId: string, episodeNumber: number, type: 'sub' | 'dub' = 'sub', retryCount = 0): Promise<DownloadLink[]> {
         let browser: Browser | null = null;
         try {
             const { browser: b, page } = await this.createStealthBrowser();
             browser = b;
 
-            const animeUrl = `${this.baseUrl}/watch/${animeId}/${type}-${episodeNumber}`;
-            console.log(`Getting streaming links for: ${animeId} Episode ${episodeNumber} (${type})`);
+            // Scrape the server page to get data-id for the episode
+            const animeWatchUrl = `${this.baseUrl}/watch/${animeId}`;
+            await page.goto(animeWatchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+            const episodeServerId = await page.evaluate((epNum, epType) => {
+                const epSelector = epType === 'dub' ? '#episodes-dub .ep-item' : '#episodes-sub .ep-item';
+                const episodeElement = Array.from(document.querySelectorAll(epSelector)).find(el => el.getAttribute('data-number') === String(epNum));
+                return episodeElement?.getAttribute('data-id') || null;
+            }, episodeNumber, type);
 
-            await page.goto(animeUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-            await page.waitForSelector('#player', { timeout: 15000 });
+            if (!episodeServerId) {
+                throw new Error(`Could not find server ID for episode ${episodeNumber} (${type})`);
+            }
 
-            // This logic is highly dependent on the website's player implementation
-            // and is the most likely part to break.
-            const servers = await page.evaluate(() => 
-                Array.from(document.querySelectorAll('.ps_-list .item')).map(el => ({
-                    name: el.querySelector('.ps_-name')?.textContent?.trim() || 'Unknown',
+            // Fetch server URLs using the scraped ID
+            const serversUrl = `${this.baseUrl}/ajax/episode/servers?episodeId=${episodeServerId}`;
+            await page.goto(serversUrl, { waitUntil: 'networkidle2' });
+            const serversData = await page.evaluate(() => JSON.parse(document.body.textContent || '{}'));
+            
+            if (serversData.status !== true) {
+                throw new Error('Failed to fetch server list from AJAX endpoint');
+            }
+            
+            const servers = await page.evaluate(() => {
+                const serverElements = document.querySelectorAll('.ps_-buttons .item');
+                return Array.from(serverElements).map(el => ({
+                    name: el.querySelector('span')?.textContent?.trim() || 'Unknown',
                     id: el.getAttribute('data-id') || ''
-                }))
-            );
+                }));
+            });
 
             if (servers.length === 0) throw new Error('No servers found on page.');
 
             const sortedServers = servers.sort((a, b) => this.getServerPriority(a.name) - this.getServerPriority(b.name));
             
-            const streamingLinks: StreamingLink[] = [];
+            const downloadLinks: DownloadLink[] = [];
 
             for (const server of sortedServers) {
                 try {
                     console.log(`Trying server: ${server.name}`);
-                    await page.click(`.ps_-list .item[data-id="${server.id}"]`);
-                    await this.delay(3000); // Wait for iframe to load
+                    const streamUrl = `${this.baseUrl}/ajax/episode/sources?id=${server.id}`;
+                    await page.goto(streamUrl, { waitUntil: 'networkidle2' });
+                    const streamData = await page.evaluate(() => JSON.parse(document.body.textContent || '{}'));
 
-                    const iframeSrc = await page.evaluate(() => document.querySelector('#player iframe')?.getAttribute('src') || null);
-                    if (iframeSrc) {
-                         streamingLinks.push({
+                    if(streamData.status === true && streamData.result?.url) {
+                         downloadLinks.push({
                             server: server.name,
-                            url: iframeSrc,
-                            quality: '1080p', // Assume best, can be refined
+                            url: streamData.result.url,
+                            quality: 'HD', // Assume best, can be refined
                             type: type,
-                            episode: episodeNumber,
-                            priority: this.getServerPriority(server.name)
+                            episode: episodeNumber
                         });
                         console.log(`Successfully extracted link from: ${server.name}`);
-                        // Break after finding the first working link for speed
                         break; 
                     }
                 } catch (serverError) {
                     console.error(`Failed to extract from server ${server.name}:`, serverError);
                 }
             }
-             if (streamingLinks.length === 0) throw new Error('No streaming links found from any server');
+             if (downloadLinks.length === 0) throw new Error('No streaming links found from any server');
             
-            return streamingLinks;
+            return downloadLinks;
 
         } catch (error) {
             console.error(`Get streaming links failed (attempt ${retryCount + 1}):`, error);
@@ -365,7 +380,7 @@ class Enhanced9AnimePlugin {
         return 999;
     }
 
-    public async downloadSeason(animeId: string, quality = '1080p', type: 'sub' | 'dub' = 'sub'): Promise<StreamingLink[]> {
+    public async downloadSeason(animeId: string, quality = '1080p', type: 'sub' | 'dub' = 'sub'): Promise<DownloadLink[]> {
         try {
             console.log(`Starting season download for: ${animeId}`);
             const details = await this.getAnimeDetails(animeId);
@@ -377,7 +392,7 @@ class Enhanced9AnimePlugin {
             
             console.log(`Detected ${totalEpisodes} episodes for season download`);
             
-            const allLinks: StreamingLink[] = [];
+            const allLinks: DownloadLink[] = [];
             for (let i = 1; i <= totalEpisodes; i++) {
                 try {
                     const links = await this.getStreamingLinks(animeId, i, type);
