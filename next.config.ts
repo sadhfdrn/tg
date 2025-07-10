@@ -32,6 +32,10 @@ const nextConfig: NextConfig = {
         source: '/api/image-proxy',
         destination: '/api/image-proxy',
       },
+       {
+        source: "/api/anime-proxy",
+        destination: "/api/anime-proxy",
+      },
     ]
   },
   output: 'standalone',
@@ -61,5 +65,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
-    

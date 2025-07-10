@@ -38,7 +38,6 @@ export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
         const data = await response.json();
-        // The API response for animepahe search doesn't include 'type', so we add a default.
         return data.results.map((item: any) => ({ ...item, type: 'N/A' }));
     } catch (error) {
         console.error("Error searching anime:", error);
@@ -67,7 +66,18 @@ export async function getEpisodeSources(episodeId: string): Promise<EpisodeSourc
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
         const data = await response.json();
-        return data.sources || [];
+        const referer = data.headers?.Referer || data.headers?.referer || 'https://animepahe.com/';
+        
+        if (!data.sources || data.sources.length === 0) {
+            return [];
+        }
+
+        return data.sources.map((source: any) => ({
+            quality: source.quality,
+            // Construct a URL to our proxy
+            url: `/api/anime-proxy?url=${encodeURIComponent(source.url)}&referer=${encodeURIComponent(referer)}`
+        }));
+
     } catch (error) {
         console.error("Error getting episode sources:", error);
         return [];

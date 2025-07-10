@@ -193,8 +193,8 @@ export default function AnimePage() {
                             {episodeSources.length > 0 && !sourcesLoading && (
                                 <div className="mt-4 space-y-2">
                                     <h4 className="font-semibold">Download Links:</h4>
-                                    {episodeSources.map(source => (
-                                        <a href={source.url} key={source.url} target="_blank" rel="noopener noreferrer">
+                                    {episodeSources.map((source, index) => (
+                                        <a href={source.url} key={index} download>
                                             <Button variant="secondary" className="w-full justify-between">
                                                 <span>{source.quality} (MP4)</span>
                                                 <Download />
