@@ -46,7 +46,7 @@ export default function TestPage() {
       {
         id: 1,
         sender: "bot",
-        text: "Welcome! Test commands here.\n\nUsage:\n- `/tiktok <url>`\n- `/tiktok-wm <url> <style.svg> <text>`",
+        text: "Welcome! Test commands here.\n\nUsage:\n- `/tiktok <url>`\n- `/tiktok-wm <url> <style.svg> <position> <text>`",
       },
     ]);
   }, []);
@@ -75,10 +75,18 @@ export default function TestPage() {
     const userMessage = input;
     setInput("");
     addMessage("user", userMessage);
-    const loadingMessageId = addMessage("bot", undefined, undefined, true);
+    const loadingMessageId = addMessage("bot", "Starting up...", undefined, true);
+
+    const onProgress = async (progress: { message: string, percentage?: number }) => {
+        let text = `⏳ ${progress.message}`;
+        if (progress.percentage !== undefined) {
+            text += ` ${progress.percentage.toFixed(0)}%`;
+        }
+        updateMessage(loadingMessageId, text, undefined, true);
+    }
 
     try {
-      const response = await handleMessage(userMessage);
+      const response = await handleMessage(userMessage, onProgress);
       updateMessage(loadingMessageId, response.text, response.media, false);
     } catch (error: any) {
         console.error(error);
@@ -138,7 +146,7 @@ export default function TestPage() {
                       : "bg-muted"
                   )}
                 >
-                  {msg.isLoading && <div className="flex items-center justify-center p-2"><Loader className="animate-spin" /></div>}
+                  {msg.isLoading && !msg.text && <div className="flex items-center justify-center p-2"><Loader className="animate-spin" /></div>}
                   {msg.text && <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>}
                   {msg.media && (
                     <div className="mt-2 space-y-2">
@@ -187,5 +195,3 @@ export default function TestPage() {
     </main>
   );
 }
-
-    
