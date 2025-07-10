@@ -143,7 +143,7 @@ export default function AnimePage() {
                     <div className="flex flex-col justify-center">
                       <h3 className="font-semibold">{anime.title}</h3>
                       <p className="text-sm text-muted-foreground">{anime.releaseDate}</p>
-                      <Badge variant="outline" className="mt-2 w-fit">{anime.type}</Badge>
+                      <Badge variant="outline" className="mt-2 w-fit uppercase">{anime.subOrDub}</Badge>
                     </div>
                   </Card>
                 ))}

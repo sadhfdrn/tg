@@ -8,7 +8,7 @@ export interface AnimeSearchResult {
     title: string;
     image: string;
     releaseDate: string;
-    type: string;
+    subOrDub: string;
 }
 
 export interface AnimeDetails {
@@ -38,7 +38,13 @@ export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
         const data = await response.json();
-        return data.results.map((item: any) => ({ ...item, type: 'N/A' }));
+        return data.results.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            image: item.image,
+            releaseDate: item.releaseDate,
+            subOrDub: item.subOrDub,
+        }));
     } catch (error) {
         console.error("Error searching anime:", error);
         return [];
@@ -63,6 +69,8 @@ export async function getEpisodeSources(episodeId: string): Promise<EpisodeSourc
     try {
         const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/watch/${episodeId}`);
         if (!response.ok) {
+            const errorData = await response.text();
+            console.error(`Consumet API watch error (${response.status}): ${errorData}`)
             throw new Error(`Consumet API returned an error: ${response.statusText}`);
         }
         const data = await response.json();
@@ -74,7 +82,6 @@ export async function getEpisodeSources(episodeId: string): Promise<EpisodeSourc
 
         return data.sources.map((source: any) => ({
             quality: source.quality,
-            // Construct a URL to our proxy
             url: `/api/anime-proxy?url=${encodeURIComponent(source.url)}&referer=${encodeURIComponent(referer)}`
         }));
 
