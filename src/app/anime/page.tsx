@@ -143,7 +143,7 @@ export default function AnimePage() {
                     <div className="flex flex-col justify-center">
                       <h3 className="font-semibold">{anime.title}</h3>
                       <p className="text-sm text-muted-foreground">{anime.releaseDate}</p>
-                      <Badge variant="outline" className="mt-2 w-fit uppercase">{anime.subOrDub}</Badge>
+                       {anime.malId && <Badge variant="outline" className="mt-2 w-fit">MAL ID: {anime.malId}</Badge>}
                     </div>
                   </Card>
                 ))}
@@ -172,18 +172,18 @@ export default function AnimePage() {
                                 className="rounded-lg object-cover self-center shadow-lg"
                                 />
                             <h2 className="text-2xl font-bold text-center">{selectedAnime.title}</h2>
-                            <p className="text-sm text-muted-foreground">{selectedAnime.description}</p>
+                            <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: selectedAnime.description }} />
                             
                             <div className="grid grid-cols-2 gap-2 text-sm">
                                 <p><strong>Status:</strong> {selectedAnime.status}</p>
                                 <p><strong>Episodes:</strong> {selectedAnime.totalEpisodes}</p>
                             </div>
                             
-                            <h3 className="font-semibold mt-4">Episodes (Session: {selectedAnime.episodes[0]?.session})</h3>
+                            <h3 className="font-semibold mt-4">Episodes</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {selectedAnime.episodes.map(ep => (
                                     <Button key={ep.id} variant={selectedEpisodeId === ep.id ? "default" : "outline"} onClick={() => handleGetSources(ep.id)}>
-                                        Episode {ep.number}
+                                        {ep.title ? `Ep ${ep.number}: ${ep.title}`: `Episode ${ep.number}`}
                                     </Button>
                                 ))}
                             </div>

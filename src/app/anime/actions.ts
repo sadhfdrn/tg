@@ -1,14 +1,17 @@
 
 'use server';
 
-const CONSUMET_API_URL = 'https://consumet-api-ayh8.onrender.com';
+import { Meta, Anime } from 'hakai-extensions';
+
+const anilist = new Meta.Anilist();
+const hianime = new Anime.HiAnime();
 
 export interface AnimeSearchResult {
     id: string;
     title: string;
     image: string;
-    releaseDate: string;
-    subOrDub: string;
+    releaseDate: string | null;
+    malId: number | null;
 }
 
 export interface AnimeDetails {
@@ -18,11 +21,12 @@ export interface AnimeDetails {
     description: string;
     status: string;
     totalEpisodes: number;
+    releaseDate: number | null;
+    malId: number | null;
     episodes: {
         id: string;
         number: number;
-        session: string;
-        url: string;
+        title: string | null;
     }[];
 }
 
@@ -33,52 +37,53 @@ export interface EpisodeSource {
 
 export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
     try {
-        const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/${encodeURIComponent(query)}`);
-        if (!response.ok) {
-            throw new Error(`Consumet API returned an error: ${response.statusText}`);
-        }
-        const data = await response.json();
+        const data = await anilist.search(query);
         return data.results.map((item: any) => ({
             id: item.id,
-            title: item.title,
+            title: item.title.romaji || item.title.english || item.title.native,
             image: item.image,
             releaseDate: item.releaseDate,
-            subOrDub: item.subOrDub,
+            malId: item.malId,
         }));
     } catch (error) {
-        console.error("Error searching anime:", error);
+        console.error("Error searching anime with hakai-extensions:", error);
         return [];
     }
 }
 
 export async function getAnimeDetails(animeId: string): Promise<AnimeDetails | null> {
     try {
-        const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/info/${animeId}`);
-        if (!response.ok) {
-            throw new Error(`Consumet API returned an error: ${response.statusText}`);
-        }
-        const data = await response.json();
-        return data;
+        const data = await anilist.fetchAnimeInfo(animeId);
+        return {
+            id: data.id,
+            title: data.title.romaji || data.title.english || data.title.native,
+            image: data.image,
+            description: data.description,
+            status: data.status,
+            totalEpisodes: data.totalEpisodes,
+            releaseDate: data.releaseDate,
+            malId: data.malId,
+            episodes: data.episodes.map((ep: any) => ({
+                id: ep.id,
+                number: ep.number,
+                title: ep.title,
+            })),
+        };
     } catch (error) {
-        console.error("Error getting anime details:", error);
+        console.error("Error getting anime details with hakai-extensions:", error);
         return null;
     }
 }
 
 export async function getEpisodeSources(episodeId: string): Promise<EpisodeSource[]> {
     try {
-        const response = await fetch(`${CONSUMET_API_URL}/anime/animepahe/watch/${episodeId}`);
-        if (!response.ok) {
-            const errorData = await response.text();
-            console.error(`Consumet API watch error (${response.status}): ${errorData}`)
-            throw new Error(`Consumet API returned an error: ${response.statusText}`);
-        }
-        const data = await response.json();
-        const referer = data.headers?.Referer || data.headers?.referer || 'https://animepahe.com/';
-        
+        const data = await hianime.fetchEpisodeSources(episodeId);
+
         if (!data.sources || data.sources.length === 0) {
             return [];
         }
+
+        const referer = data.headers?.Referer || data.headers?.referer || 'https://hianime.to';
 
         return data.sources.map((source: any) => ({
             quality: source.quality,
@@ -86,7 +91,7 @@ export async function getEpisodeSources(episodeId: string): Promise<EpisodeSourc
         }));
 
     } catch (error) {
-        console.error("Error getting episode sources:", error);
+        console.error("Error getting episode sources with hakai-extensions:", error);
         return [];
     }
 }

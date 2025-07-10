@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'i.animepahe.ru',
+        hostname: 's4.anilist.co',
         port: '',
         pathname: '/**',
       },
