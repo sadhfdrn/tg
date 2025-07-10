@@ -1,17 +1,18 @@
 
 'use server';
 
-import { Meta, Anime } from 'hakai-extensions';
+import axios from 'axios';
 
-const anilist = new Meta.Anilist();
-const hianime = new Anime.HiAnime();
+const consumetApi = axios.create({
+    baseURL: 'https://consumet-api-ayh8.onrender.com'
+});
 
 export interface AnimeSearchResult {
     id: string;
     title: string;
     image: string;
     releaseDate: string | number;
-    subOrDub: 'sub' | 'dub';
+    subOrDub: string;
 }
 
 export interface AnimeDetails {
@@ -21,12 +22,13 @@ export interface AnimeDetails {
     description: string;
     genres: string[];
     status: string;
-    releaseDate: number;
+    releaseDate: string | number;
     totalEpisodes: number;
     episodes: {
         id: string;
         number: number;
         title?: string;
+        url?: string;
     }[];
 }
 
@@ -37,27 +39,26 @@ export interface EpisodeSource {
 
 export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
     try {
-        const data = await anilist.search(query);
+        const { data } = await consumetApi.get(`/anime/gogoanime/${encodeURIComponent(query)}`);
         return data.results.map((item: any) => ({
             id: item.id,
-            title: item.title.english || item.title.romaji,
+            title: item.title,
             image: item.image,
             releaseDate: item.releaseDate,
             subOrDub: item.subOrDub,
         }));
     } catch (error) {
-        console.error("Error searching anime with hakai-extensions:", error);
+        console.error("Error searching anime with Consumet API:", error);
         return [];
     }
 }
 
 export async function getAnimeDetails(animeId: string): Promise<AnimeDetails | null> {
     try {
-        const data = await anilist.fetchAnilistInfoById(animeId);
-        
+        const { data } = await consumetApi.get(`/anime/gogoanime/info/${animeId}`);
         return {
             id: data.id,
-            title: data.title.english || data.title.romaji,
+            title: data.title,
             image: data.image,
             description: data.description,
             genres: data.genres,
@@ -67,27 +68,26 @@ export async function getAnimeDetails(animeId: string): Promise<AnimeDetails | n
             episodes: data.episodes.map((ep: any) => ({
                 id: ep.id,
                 number: ep.number,
-                title: ep.title,
+                url: ep.url
             })),
         };
     } catch (error) {
-        console.error("Error getting anime details with hakai-extensions:", error);
+        console.error("Error getting anime details with Consumet API:", error);
         return null;
     }
 }
 
 export async function getEpisodeSources(episodeId: string): Promise<EpisodeSource[]> {
     try {
-        const data = await hianime.fetchEpisodeSources(episodeId);
-
-        const referer = data.headers?.Referer || data.headers?.referer || 'https://hianime.to';
+        const { data } = await consumetApi.get(`/anime/gogoanime/watch/${episodeId}`);
+        const referer = data.headers?.Referer || data.headers?.referer || 'https://gogoanime.lu';
 
         return data.sources.map((source: any) => ({
             quality: source.quality,
             url: `/api/anime-proxy?url=${encodeURIComponent(source.url)}&referer=${encodeURIComponent(referer)}`
         }));
     } catch (error) {
-        console.error("Error getting episode sources with hakai-extensions:", error);
+        console.error("Error getting episode sources with Consumet API:", error);
         return [];
     }
 }

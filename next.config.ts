@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'img.zorores.id',
+        hostname: 'gogocdn.net',
         port: '',
         pathname: '/**',
       }
@@ -61,11 +61,6 @@ const nextConfig: NextConfig = {
       })
     }
     
-    // This is to fix the "Module not found: Can't resolve '...'" error with browserslist
-    config.externals.push({
-      'browserslist': 'browserslist',
-    });
-
     return config
   }
 };

@@ -15,11 +15,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader, Search, Film, Download, ArrowLeft, Tv, Clapperboard } from 'lucide-react';
+import { Loader, Search, Film, Download, ArrowLeft } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function AnimePage() {
   const [query, setQuery] = useState('');
@@ -194,7 +193,7 @@ export default function AnimePage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {selectedAnime.episodes.map(ep => (
                                     <Button key={ep.id} variant={selectedEpisodeId === ep.id ? "default" : "outline"} onClick={() => handleGetSources(ep.id)}>
-                                        {`Ep ${ep.number}${ep.title ? `: ${ep.title}` : ''}`}
+                                        {`Ep ${ep.number}`}
                                     </Button>
                                 ))}
                             </div>
