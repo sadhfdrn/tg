@@ -246,22 +246,26 @@ class Enhanced9AnimePlugin {
             console.log(`Fetching details for: ${animeId}`);
 
             await page.goto(animeUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-            await page.waitForSelector('.anisc-detail', { timeout: 15000 });
+            await page.waitForSelector('#ani_detail', { timeout: 15000 });
 
             const details = await page.evaluate((): AnimeDetails => {
-                const title = document.querySelector('.anisc-detail .film-name')?.textContent?.trim() || 'Unknown';
-                const description = document.querySelector('.anisc-detail .film-description')?.textContent?.trim() || 'No description.';
-                const poster = document.querySelector('.anisc-poster .film-poster-img')?.getAttribute('src') || '';
+                const detailRoot = document.querySelector('#ani_detail');
+                const title = detailRoot?.querySelector('.film-name')?.textContent?.trim() || 'Unknown';
+                const description = detailRoot?.querySelector('.film-description')?.textContent?.trim() || 'No description.';
+                const poster = detailRoot?.querySelector('.film-poster .film-poster-img')?.getAttribute('src') || '';
                 
                 const infoItems: Record<string, string> = {};
-                document.querySelectorAll('.anisc-info .item-head').forEach(itemHead => {
-                    const key = itemHead?.textContent?.trim().toLowerCase().replace(':', '') || '';
-                    const valueContainer = itemHead.nextElementSibling;
-                    const value = valueContainer?.textContent?.trim() || '';
-                    if (key) infoItems[key] = value;
+                detailRoot?.querySelectorAll('.anisc-info .item-head').forEach(itemHead => {
+                    const keyElement = itemHead;
+                    const valueElement = itemHead.nextElementSibling;
+                    const key = keyElement?.textContent?.trim().toLowerCase().replace(':', '') || '';
+                    const value = valueElement?.textContent?.trim() || '';
+                     if (key && value) {
+                        infoItems[key] = value;
+                    }
                 });
                 
-                const genres = Array.from(document.querySelectorAll('.anisc-info .genres a')).map(el => el.textContent?.trim() || '').filter(Boolean);
+                const genres = Array.from(detailRoot?.querySelectorAll('.anisc-info .genres a') || []).map(el => el.textContent?.trim() || '').filter(Boolean);
 
                 return {
                     title,
@@ -270,7 +274,7 @@ class Enhanced9AnimePlugin {
                     year: infoItems['premiered'] || 'N/A',
                     status: infoItems['status'] || 'Unknown',
                     genres,
-                    episodes: infoItems['total episode'] || 'N/A',
+                    episodes: infoItems['total episode'] || '1', // Default to 1 for movies/single-episode content
                     duration: infoItems['duration'] || 'N/A',
                     studio: infoItems['studios'] || 'N/A',
                     score: 'N/A' // Score is not consistently available
@@ -300,23 +304,26 @@ class Enhanced9AnimePlugin {
             // Scrape the server page to get data-id for the episode
             const animeWatchUrl = `${this.baseUrl}/watch/${animeId}`;
             await page.goto(animeWatchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-            const episodeServerId = await page.evaluate((epNum, epType) => {
-                const epSelector = epType === 'dub' ? '#episodes-dub .ep-item' : '#episodes-sub .ep-item';
-                const episodeElement = Array.from(document.querySelectorAll(epSelector)).find(el => el.getAttribute('data-number') === String(epNum));
+            
+            const episodeDataId = await page.evaluate((epNum, epType) => {
+                const serverContainer = document.querySelector(epType === 'dub' ? '#servers-dub' : '#servers-sub');
+                if (!serverContainer) return null;
+
+                const episodeElement = Array.from(serverContainer.querySelectorAll('.ep-item')).find(el => el.getAttribute('data-number') === String(epNum));
                 return episodeElement?.getAttribute('data-id') || null;
             }, episodeNumber, type);
 
-            if (!episodeServerId) {
+            if (!episodeDataId) {
                 throw new Error(`Could not find server ID for episode ${episodeNumber} (${type})`);
             }
 
             // Fetch server URLs using the scraped ID
-            const serversUrl = `${this.baseUrl}/ajax/episode/servers?episodeId=${episodeServerId}`;
+            const serversUrl = `${this.baseUrl}/ajax/episode/servers?episodeId=${episodeDataId}`;
             await page.goto(serversUrl, { waitUntil: 'networkidle2' });
-            const serversData = await page.evaluate(() => JSON.parse(document.body.textContent || '{}'));
             
-            if (serversData.status !== true) {
-                throw new Error('Failed to fetch server list from AJAX endpoint');
+            const serversData = await page.evaluate(() => document.body.innerHTML);
+            if (!serversData.includes('status":true')) {
+                 throw new Error('Failed to fetch server list from AJAX endpoint');
             }
             
             const servers = await page.evaluate(() => {
