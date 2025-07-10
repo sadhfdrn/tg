@@ -440,7 +440,7 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
         let errorMessage = "An unexpected error occurred while processing your request.";
         if (axios.isAxiosError(error) && error.response) {
             console.error("Telegram API Error Response:", error.response.data);
-            errorMessage = `Failed to send media: ${error.response.data.description}`;
+            errorMessage = `Failed to send media: ${error.response.data.description || 'Unknown API error'}`;
         } else {
             errorMessage = `An unexpected error occurred: ${error.message}`;
         }

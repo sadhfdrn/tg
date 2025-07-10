@@ -142,7 +142,7 @@ async function downloadWithAlternativeAPI(url: string, onProgress?: ProgressCall
         const mediaData: { type: 'video' | 'image', url: string, index: number }[] = [];
         if (data.play || data.wmplay) mediaData.push({ type: 'video', url: data.play || data.wmplay, index: 0 });
         if (data.images && Array.isArray(data.images)) {
-            data.images.forEach((imageUrl: string, index: number) => mediaData.push({ type: 'image', url: imageUrl, index }));
+            data.images.forEach((string: string, index: number) => mediaData.push({ type: 'image', url: string, index }));
         }
         if (mediaData.length > 0) return downloadMediaFiles(mediaData, onProgress, 'alternative_api');
     }
@@ -170,9 +170,17 @@ async function downloadTikTokMedia(url: string, onProgress?: ProgressCallback) {
 
 
 async function getWatermarkBuffer(text: string, style: string): Promise<Buffer> {
-    const svgPath = path.join(process.cwd(), 'src', 'assets', style);
+    // Correctly resolve path to assets included in the build
+    const svgPath = path.join(process.cwd(), '.next/server/app/assets', style);
     if (!fs.existsSync(svgPath)) {
-        throw new Error(`Watermark style ${style} not found.`);
+        // Fallback for local development
+        const devPath = path.join(process.cwd(), 'src/assets', style);
+        if(!fs.existsSync(devPath)) {
+            throw new Error(`Watermark style ${style} not found in production or development paths.`);
+        }
+        const svgTemplate = await fs.promises.readFile(devPath, 'utf-8');
+        const finalSvg = svgTemplate.replace(/TEXT_PLACEHOLDER/g, text);
+        return Buffer.from(finalSvg);
     }
     const svgTemplate = await fs.promises.readFile(svgPath, 'utf-8');
     const finalSvg = svgTemplate.replace(/TEXT_PLACEHOLDER/g, text);
@@ -215,7 +223,7 @@ async function addWatermarkToVideo(inputPath: string, outputPath: string, waterm
             .outputOptions(['-c:v libx264', '-preset fast', '-crf 23', '-c:a copy'])
             .output(outputPath)
             .on('progress', (progress) => {
-                if (onProgress && progress.percent) {
+                if (onProgress && progress.percent && progress.percent >= 0) {
                     onProgress({ message: 'Applying watermark...', percentage: progress.percent });
                 }
             })
