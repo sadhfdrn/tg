@@ -1,46 +1,44 @@
-
-# Stage 1: Install dependencies and build the application
+# First stage: build the app
 FROM node:20-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
 # Install dependencies needed for Sharp and FFmpeg
-# We install build dependencies here, but not in the final image
+# Using --no-cache helps to keep the image size down
 RUN apk add --no-cache libc6-compat build-base python3 make g++ ffmpeg vips-dev
 
 # Copy package files and install dependencies
+# Using npm ci is faster and more reliable for CI/CD environments
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
-# Copy the rest of the application code
+# Copy application code
+# This includes the src directory with assets
 COPY . .
 
-# Build the Next.js application
-# This will also trigger asset copying if configured in next.config.js
+# Build the Next.js app
+# The output will be in standalone mode as configured in next.config.ts
 RUN npm run build
 
-# Stage 2: Create the final, lean production image
+# Second stage: create the lean production image
 FROM node:20-alpine AS runner
 
-# Set working directory
 WORKDIR /app
 
-# Install runtime dependencies for Sharp and FFmpeg
-# We only install what's needed to RUN the app, not build it.
+# Install only the runtime dependencies needed by the application
+# ffmpeg for video processing and vips for sharp
 RUN apk add --no-cache ffmpeg vips
 
-# Set environment variables for Next.js
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED 1
+# Set user to a non-root user for better security
+USER node
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Copy the standalone output from the builder stage
+# This includes the server, dependencies, and static assets
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
-# Copy the assets from the builder stage to the final image
-# This ensures our watermark SVGs are available in production
-COPY --from=builder /app/.next/server/app/assets ./app/assets
+# Expose the port the app runs on
+EXPOSE 3000
 
+# The command to run the Next.js standalone server
 CMD ["node", "server.js"]
