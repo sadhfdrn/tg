@@ -39,7 +39,7 @@ export interface EpisodeSource {
 
 export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
     try {
-        const { data } = await consumetApi.get(`/anime/gogoanime/${encodeURIComponent(query)}`);
+        const { data } = await consumetApi.get(`/anime/gogoanime/${encodeURIComponent(query)}?page=1`);
         return data.results.map((item: any) => ({
             id: item.id,
             title: item.title,
