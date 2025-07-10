@@ -1,0 +1,20 @@
+diff --git a/node_modules/aniwatch-fork/dist/lib/utils.js b/node_modules/aniwatch-fork/dist/lib/utils.js
+index f30f146..084e493 100644
+--- a/node_modules/aniwatch-fork/dist/lib/utils.js
++++ b/node_modules/aniwatch-fork/dist/lib/utils.js
+@@ -10,13 +10,7 @@
+ const logger_1 = __importDefault(require("./logger"));
+ const ভাইরাল_1 = __importDefault(require("./\u09AC\u09BE\u0987\u09B0\u09BE\u09B2"));
+ const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36";
+-const p = (0, pino_1.default)({
+-    transport: {
+-        target: "pino-pretty",
+-        options: {
+-            colorize: true,
+-        },
+-    },
+-});
++const p = (0, pino_1.default)();
+ const log = p;
+ exports.log = log;
+ const ভাইরাল = new ভাইরাল_1.default();

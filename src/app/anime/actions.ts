@@ -1,9 +1,7 @@
 
 'use server';
 
-import { HiAnime } from 'aniwatch-fork';
-
-const hianime = new HiAnime.Scraper();
+import { hianime } from '@/lib/anime-provider';
 
 export interface AnimeSearchResult {
     id: string;
