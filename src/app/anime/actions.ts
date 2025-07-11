@@ -39,14 +39,17 @@ export interface EpisodeSource {
 
 export async function searchAnime(query: string): Promise<AnimeSearchResult[]> {
     try {
-        const { data } = await consumetApi.get(`/anime/gogoanime/${encodeURIComponent(query)}?page=1`);
-        return data.results.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            image: item.image,
-            releaseDate: item.releaseDate,
-            subOrDub: item.subOrDub,
-        }));
+        const { data } = await consumetApi.get(`/anime/gogoanime/${encodeURIComponent(query)}`, { params: { page: 1 } });
+        if (data && data.results) {
+            return data.results.map((item: any) => ({
+                id: item.id,
+                title: item.title,
+                image: item.image,
+                releaseDate: item.releaseDate,
+                subOrDub: item.subOrDub,
+            })).filter((item: AnimeSearchResult) => item.id && item.title); // Ensure basic data exists
+        }
+        return [];
     } catch (error) {
         console.error("Error searching anime with Consumet API:", error);
         return [];
