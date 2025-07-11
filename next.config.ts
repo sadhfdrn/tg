@@ -18,27 +18,7 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      {
-        protocol: 'https',
-        hostname: 's4.anilist.co',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'gogocdn.net',
-        port: '',
-        pathname: '/**',
-      }
     ],
-  },
-  async rewrites() {
-    return [
-       {
-        source: "/api/anime-proxy",
-        destination: "/api/anime-proxy",
-      },
-    ]
   },
   output: 'standalone',
   webpack: (config, { isServer }) => {

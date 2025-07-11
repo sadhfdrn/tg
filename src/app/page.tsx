@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from 'next/link';
-import { Bot, TestTube2, CheckCircle, AlertCircle, Loader, MessageSquare, Film } from "lucide-react";
+import { Bot, TestTube2, CheckCircle, AlertCircle, Loader, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -99,7 +99,7 @@ export default function Home() {
                 </div>
             )}
 
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6">
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-6">
                 <div className="flex flex-col items-center gap-2">
                     <h3 className="text-lg font-semibold">Test Your Commands</h3>
                     <p className="text-muted-foreground text-sm">
@@ -119,17 +119,6 @@ export default function Home() {
                     <Button asChild variant="outline">
                         <Link href="/send-message">
                             <MessageSquare className="mr-2" /> Send a Message
-                        </Link>
-                    </Button>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                    <h3 className="text-lg font-semibold">Anime Downloader</h3>
-                    <p className="text-muted-foreground text-sm">
-                        Search and get download links for anime episodes.
-                    </p>
-                    <Button asChild variant="outline">
-                        <Link href="/anime">
-                            <Film className="mr-2" /> Go to Anime Page
                         </Link>
                     </Button>
                 </div>
