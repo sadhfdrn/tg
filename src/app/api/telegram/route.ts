@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
-import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/app/anime/actions';
-import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/lib/consumet.ts/src/models';
+import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/lib/anime-scrapper/actions';
+import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/lib/anime-scrapper/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -298,8 +298,8 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
 
     const currentIndex = state.animeSearchIndex || 0;
     const anime = results[currentIndex];
-    const title = typeof anime.title === 'string' ? anime.title : anime.title.english || anime.title.romaji;
-    const caption = `*${title}*\n\nTotal Chapters: ${anime.lastChapter || 'N/A'}\n\n*Description:* Not available for this provider.`;
+    const title = typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji;
+    const caption = `*${title}*\n\n*Total Episodes:* ${anime.episodes || 'N/A'}\n\n*Description:* Not available for this provider.`;
     const photoUrl = anime.image || 'https://via.placeholder.com/225x350.png?text=No+Image';
     const reply_markup = getAnimeNavigationKeyboard(currentIndex, results.length);
 
@@ -551,6 +551,7 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     }
     state.step = 'awaiting_episode_selection';
     const info = state.animeInfo;
+    const title = typeof info.title === 'string' ? info.title : (info.title as any).english || (info.title as any).romaji;
 
     // Filter episodes based on Sub/Dub selection
     const availableEpisodes = info.episodes?.filter(ep => 
@@ -558,7 +559,7 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     ) || [];
 
     if (availableEpisodes.length === 0) {
-        await editMessage(chatId, state.currentMessageId!, `*${typeof info.title === 'string' ? info.title : info.title.english}*\n\nSorry, no episodes found for the selected version.`, getMainMenuKeyboard());
+        await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for the selected version.`, getMainMenuKeyboard());
         state.step = 'idle';
         return;
     }
@@ -573,7 +574,7 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     rows.push([{ text: 'All Episodes' }]);
     rows.push([{ text: '✅ Confirm Download' }, { text: '❌ Cancel' }]);
 
-    await editMessage(chatId, state.currentMessageId!, `Found *${availableEpisodes.length}* episodes for *${typeof info.title === 'string' ? info.title : info.title.english}*. Please make your selection.`);
+    await editMessage(chatId, state.currentMessageId!, `Found *${availableEpisodes.length}* episodes for *${title}*. Please make your selection.`);
     
     await sendMessage(chatId, `Which *${state.selectedSubOrDub}* episodes would you like to download?`, {
         keyboard: rows,
@@ -609,7 +610,7 @@ async function processCallbackQuery(callbackQuery: any) {
     } else if (data === 'anime_select') {
         const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
         
-        const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : selectedAnime.title.english || selectedAnime.title.romaji;
+        const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : (selectedAnime.title as any).english || (selectedAnime.title as any).romaji;
         if (state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
         else state.currentMessageId = await sendMessage(chatId, `Fetching details for *${title}*...`);
         

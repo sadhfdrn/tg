@@ -10,8 +10,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { IAnimeInfo, IAnimeResult, ISearch } from '@/../consumet.ts/src/models';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from './actions';
+import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
 
 type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
 
@@ -62,10 +62,8 @@ export default function AnimePage() {
       const sources = await getEpisodeSources(episodeId);
       const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
       if (source?.url) {
-        // Use the proxy for downloading
         const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
         
-        // Create a temporary link to trigger the download
         const link = document.createElement('a');
         link.href = proxyUrl;
         link.setAttribute('download', `${episodeId}.mp4`);
@@ -119,13 +117,13 @@ export default function AnimePage() {
                         <div className="flex gap-4 items-center w-full">
                           <Image
                             src={anime.image || 'https://placehold.co/100x150.png'}
-                            alt={typeof anime.title === 'string' ? anime.title : anime.title.english || ''}
+                            alt={typeof anime.title === 'string' ? anime.title : (anime.title as any).english || ''}
                             width={75}
                             height={112}
                             className="rounded-md object-cover"
                           />
                           <div className="text-left flex-grow">
-                            <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : anime.title.english || anime.title.romaji}</h3>
+                            <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji}</h3>
                             <div className="text-sm text-muted-foreground">{anime.type}</div>
                           </div>
                           {infoLoading[anime.id] && <Loader className="animate-spin mr-2" />}

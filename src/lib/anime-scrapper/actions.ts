@@ -1,7 +1,7 @@
 'use server';
 
-import AnimeOwl from '@/lib/anime-scrapper/animeowl';
-import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/lib/anime-scrapper/models';
+import AnimeOwl from './animeowl';
+import { IAnimeInfo, IAnimeResult, ISearch, ISource } from './models';
 
 const animeowl = new AnimeOwl();
 
