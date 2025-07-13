@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
+import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/app/anime/actions';
+import { IAnimeResult, IAnimeInfo } from '@/../consumet.ts/src/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -12,12 +14,16 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
 interface UserState {
-    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete';
+    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete' | 'awaiting_anime_name' | 'awaiting_anime_selection' | 'awaiting_episode_selection';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
     presetPositionBuffer?: WatermarkPosition;
     presets: Record<string, { text: string; style: string; position: WatermarkPosition }>;
+    animeSearchResults?: IAnimeResult[];
+    animeSearchIndex?: number;
+    animeInfo?: IAnimeInfo;
+    currentMessageId?: number;
 }
 
 const userStates: Record<string, UserState> = {};
@@ -60,6 +66,20 @@ async function sendMessage(chatId: string | number, text: string, reply_markup?:
     return null;
 }
 
+async function sendPhoto(chatId: string | number, photo: string, caption: string, reply_markup?: any): Promise<number | null> {
+    await sendTypingAction(chatId);
+    try {
+        const response = await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, { chat_id: chatId, photo, caption, parse_mode: 'Markdown', reply_markup });
+         if (response.data.ok && response.data.result) {
+            return response.data.result.message_id;
+        }
+    } catch (error) {
+        console.error('Failed to send photo:', error);
+    }
+    return null;
+}
+
+
 async function editMessage(chatId: string | number, messageId: number, text: string) {
     try {
         await axios.post(`${TELEGRAM_API_URL}/editMessageText`, {
@@ -77,6 +97,34 @@ async function editMessage(chatId: string | number, messageId: number, text: str
     }
 }
 
+async function editMessageMedia(chatId: string | number, messageId: number, media: any, reply_markup?: any) {
+    try {
+        await axios.post(`${TELEGRAM_API_URL}/editMessageMedia`, {
+            chat_id: chatId,
+            message_id: messageId,
+            media: media,
+            reply_markup: reply_markup
+        });
+    } catch (error) {
+        console.error('Failed to edit message media:', (error as any).response?.data || (error as any).message);
+    }
+}
+
+async function editMessageCaption(chatId: string | number, messageId: number, caption: string, reply_markup?: any) {
+    try {
+        await axios.post(`${TELEGRAM_API_URL}/editMessageCaption`, {
+            chat_id: chatId,
+            message_id: messageId,
+            caption: caption,
+            parse_mode: 'Markdown',
+            reply_markup: reply_markup
+        });
+    } catch (error) {
+        console.error('Failed to edit message caption:', (error as any).response?.data || (error as any).message);
+    }
+}
+
+
 async function deleteMessage(chatId: string | number, messageId: number) {
     try {
         await axios.post(`${TELEGRAM_API_URL}/deleteMessage`, {
@@ -88,12 +136,24 @@ async function deleteMessage(chatId: string | number, messageId: number) {
     }
 }
 
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+    try {
+        await axios.post(`${TELEGRAM_API_URL}/answerCallbackQuery`, {
+            callback_query_id: callbackQueryId,
+            text: text,
+        });
+    } catch (error) {
+        console.error('Failed to answer callback query:', error);
+    }
+}
+
+
 // --- Keyboards ---
 
 function getMainMenuKeyboard() {
     return {
         keyboard: [
-            [{ text: '🎶 TikTok' }],
+            [{ text: '🎶 TikTok' }, { text: '😎 Anime' }],
         ],
         resize_keyboard: true,
         one_time_keyboard: false
@@ -200,6 +260,57 @@ function getDeletePresetKeyboard(state: UserState) {
     };
 }
 
+function getAnimeNavigationKeyboard(currentIndex: number, totalResults: number) {
+    const buttons = [];
+    if (currentIndex > 0) {
+        buttons.push({ text: '⬅️ Back', callback_data: 'anime_prev' });
+    }
+    buttons.push({ text: '✅ Select', callback_data: 'anime_select' });
+    if (currentIndex < totalResults - 1) {
+        buttons.push({ text: 'Next ➡️', callback_data: 'anime_next' });
+    }
+
+    return {
+        inline_keyboard: [buttons]
+    };
+}
+
+
+async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
+    const results = state.animeSearchResults;
+    if (!results || results.length === 0) {
+        await sendMessage(chatId, "No anime found for your query.");
+        state.step = 'idle';
+        return;
+    }
+
+    const currentIndex = state.animeSearchIndex || 0;
+    const anime = results[currentIndex];
+    const caption = `*${anime.title}*\n\n${anime.lastChapter || ''}\n\n*Description:* Not available for this provider.`;
+    const photoUrl = anime.image || 'https://via.placeholder.com/225x350.png?text=No+Image';
+    const reply_markup = getAnimeNavigationKeyboard(currentIndex, results.length);
+
+    if (state.currentMessageId) {
+        try {
+             await editMessageMedia(chatId, state.currentMessageId, {
+                type: 'photo',
+                media: photoUrl,
+                caption: caption,
+                parse_mode: 'Markdown'
+            }, reply_markup);
+        } catch (e) {
+            console.error("Editing media failed, sending new message.", e);
+            await deleteMessage(chatId, state.currentMessageId);
+            const newMessageId = await sendPhoto(chatId, photoUrl, caption, reply_markup);
+            if (newMessageId) state.currentMessageId = newMessageId;
+        }
+
+    } else {
+        const messageId = await sendPhoto(chatId, photoUrl, caption, reply_markup);
+        if (messageId) state.currentMessageId = messageId;
+    }
+}
+
 
 async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
@@ -207,17 +318,53 @@ async function processIncomingMessage(chatId: string, text: string) {
 
     // --- Universal Cancel / Back ---
     if (trimmedText === '❌ Cancel' || trimmedText === '🔙 Back to Main Menu') {
+        if (state.currentMessageId) await deleteMessage(chatId, state.currentMessageId);
         state.step = 'idle';
         state.urlBuffer = undefined;
         state.presetNameBuffer = undefined;
         state.presetStyleBuffer = undefined;
         state.presetPositionBuffer = undefined;
+        state.animeSearchResults = undefined;
+        state.animeSearchIndex = undefined;
+        state.animeInfo = undefined;
+        state.currentMessageId = undefined;
         await sendMessage(chatId, "Action cancelled. Returning to the main menu.", getMainMenuKeyboard());
         return;
     }
 
     // --- State Machine ---
     switch(state.step) {
+        case 'awaiting_anime_name':
+            const messageId = await sendMessage(chatId, `Searching for "${trimmedText}"...`);
+            try {
+                const searchResults = await searchAnime(trimmedText);
+                if (searchResults.results.length === 0) {
+                    if (messageId) await editMessage(chatId, messageId, `No results found for "${trimmedText}". Please try another name.`);
+                    return;
+                }
+                if (messageId) await deleteMessage(chatId, messageId);
+                
+                state.animeSearchResults = searchResults.results;
+                state.animeSearchIndex = 0;
+                state.step = 'awaiting_anime_selection';
+                await sendOrEditAnimeMessage(chatId, state);
+
+            } catch (error) {
+                 if (messageId) await editMessage(chatId, messageId, "Sorry, there was an error with the search. Please try again.");
+                console.error(error);
+            }
+            return;
+        
+        case 'awaiting_episode_selection':
+            // Logic to handle user's episode choice will go here.
+            if (trimmedText === '✅ Confirm Download') {
+                await sendMessage(chatId, "Alright! Starting download... (This part is not fully implemented yet).", getMainMenuKeyboard());
+                state.step = 'idle'; // Reset for next command
+            } else {
+                 await sendMessage(chatId, "Please use the provided keyboard to make a selection.");
+            }
+            return;
+
         case 'awaiting_url':
             if (trimmedText.includes('tiktok.com')) {
                 state.urlBuffer = trimmedText;
@@ -359,6 +506,12 @@ async function processIncomingMessage(chatId: string, text: string) {
         await sendMessage(chatId, 'Welcome! Use the menu below to get started.', getMainMenuKeyboard());
         return;
     }
+    
+    if (trimmedText === '/anime') {
+        state.step = 'awaiting_anime_name';
+        await sendMessage(chatId, "What anime are you looking for?");
+        return;
+    }
 
     if (trimmedText === '🎶 TikTok') {
         state.step = 'awaiting_main_menu_choice';
@@ -373,6 +526,58 @@ async function processIncomingMessage(chatId: string, text: string) {
         await sendMessage(chatId, "Got it! How do you want to download this video?", getDownloadOptionsKeyboard(state));
     } else {
         await sendMessage(chatId, "I'm not sure what to do with that. Please use the menu below or send a TikTok URL.", getMainMenuKeyboard());
+    }
+}
+
+async function processCallbackQuery(callbackQuery: any) {
+    const chatId = callbackQuery.message.chat.id.toString();
+    const state = getUserState(chatId);
+    const data = callbackQuery.data;
+
+    await answerCallbackQuery(callbackQuery.id);
+
+    if (state.step !== 'awaiting_anime_selection') return;
+
+    if (data === 'anime_next' || data === 'anime_prev') {
+        if (data === 'anime_next') {
+            state.animeSearchIndex = (state.animeSearchIndex ?? 0) + 1;
+        } else {
+            state.animeSearchIndex = (state.animeSearchIndex ?? 0) - 1;
+        }
+        await sendOrEditAnimeMessage(chatId, state);
+    } else if (data === 'anime_select') {
+        const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
+        
+        if (state.currentMessageId) await deleteMessage(chatId, state.currentMessageId);
+        const loadingMsgId = await sendMessage(chatId, `Fetching details for *${selectedAnime.title}*...`);
+        
+        try {
+            const info = await getAnimeInfo(selectedAnime.id);
+            state.animeInfo = info;
+            state.step = 'awaiting_episode_selection';
+
+            const episodeButtons = (info.episodes || []).map(ep => ({ text: `Episode ${ep.number}`}));
+            
+            const rows = [];
+            for (let i = 0; i < episodeButtons.length; i += 3) {
+                rows.push(episodeButtons.slice(i, i + 3));
+            }
+
+            rows.push([{ text: 'All Episodes' }]);
+            rows.push([{ text: '✅ Confirm Download' }, { text: '❌ Cancel' }]);
+
+            if (loadingMsgId) await editMessage(chatId, loadingMsgId, `Found *${info.episodes?.length || 0}* episodes for *${info.title}*. Please make your selection.`);
+            
+            await sendMessage(chatId, 'Which episodes would you like to download?', {
+                keyboard: rows,
+                one_time_keyboard: true,
+                resize_keyboard: true,
+            });
+
+        } catch (error) {
+            console.error(error);
+            if(loadingMsgId) await editMessage(chatId, loadingMsgId, `Could not fetch details for *${selectedAnime.title}*.`);
+        }
     }
 }
 
@@ -463,8 +668,10 @@ export async function POST(request: Request) {
             const chatId = body.message.chat.id.toString();
             const incomingText = body.message.text;
             await processIncomingMessage(chatId, incomingText);
+        } else if (body.callback_query) {
+             await processCallbackQuery(body.callback_query);
         } else {
-             console.log("Update is not a standard text message, skipping.");
+             console.log("Update is not a standard text message or callback query, skipping.");
         }
 
     } catch (error: any)

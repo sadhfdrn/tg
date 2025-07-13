@@ -18,9 +18,31 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return new NextResponse(response.data);
+    // Get the headers from the axios response
+    const headers = new Headers();
+    Object.entries(response.headers).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        headers.set(key, value);
+      } else if (Array.isArray(value)) {
+        headers.set(key, value.join(', '));
+      }
+    });
+
+    // Stream the response back to the client
+    return new NextResponse(response.data, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: headers,
+    });
+
   } catch (error) {
     console.error('Proxy error:', error);
+    if (axios.isAxiosError(error) && error.response) {
+      return new NextResponse(error.response.data, {
+        status: error.response.status,
+        statusText: error.response.statusText,
+      });
+    }
     return new NextResponse('Error fetching the content', { status: 500 });
   }
 }

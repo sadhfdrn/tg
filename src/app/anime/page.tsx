@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Image from 'next/image';
-import { Search, Loader, Download, PlayCircle, Tv, Film } from 'lucide-react';
+import { Search, Loader, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,7 +89,7 @@ export default function AnimePage() {
     <div className="flex justify-center items-start min-h-screen bg-muted/40 p-4">
       <Card className="w-full max-w-4xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Tv /> Anime Downloader</CardTitle>
+          <CardTitle>Anime Downloader</CardTitle>
           <CardDescription>Search for your favorite anime and download episodes.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -126,11 +126,7 @@ export default function AnimePage() {
                           />
                           <div className="text-left flex-grow">
                             <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : anime.title.english || anime.title.romaji}</h3>
-                            <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                                {anime.type === 'Movie' ? <Film size={16} /> : <Tv size={16} />}
-                                <span>{anime.type}</span>
-                                {anime.lastChapter && <span className="text-xs">({anime.lastChapter})</span>}
-                            </div>
+                            <div className="text-sm text-muted-foreground">{anime.type}</div>
                           </div>
                           {infoLoading[anime.id] && <Loader className="animate-spin mr-2" />}
                         </div>
