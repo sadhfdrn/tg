@@ -4,7 +4,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/app/anime/actions';
-import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/../consumet/src/models';
+import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/consumet/src/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -680,20 +680,14 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
                 const form = new FormData();
                 form.append('chat_id', String(chatId));
 
-                const base64Data = item.url.split(';base64,').pop();
-                if (!base64Data) continue;
-
-                const fileBuffer = Buffer.from(base64Data, 'base64');
-                const fileName = item.type === 'video' ? 'video.mp4' : 'image.jpg';
-                const fileOptions = { filename: fileName, contentType: item.type === 'video' ? 'video/mp4' : 'image/jpeg' };
-
+                if (item.caption) form.append('caption', item.caption);
+                
+                // Use the file URL directly
                 if (item.type === 'video') {
-                    form.append('video', fileBuffer, fileOptions);
-                    if (item.caption) form.append('caption', item.caption);
+                    form.append('video', item.url);
                     await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
                 } else {
-                    form.append('photo', fileBuffer, fileOptions);
-                    if (item.caption) form.append('caption', item.caption);
+                    form.append('photo', item.url);
                     await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
                 }
             }

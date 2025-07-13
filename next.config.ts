@@ -23,6 +23,12 @@ const nextConfig: NextConfig = {
         hostname: 'animeowl.me',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'gogocdn.net',
+        port: '',
+        pathname: '/**',
       }
     ],
   },
@@ -35,26 +41,19 @@ const nextConfig: NextConfig = {
     ]
   },
   output: 'standalone',
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // This is a workaround to make sure the assets are copied to the server build
-      const assetsPath = path.join(__dirname, 'src', 'assets');
-      config.module.rules.push({
-        test: /\.(svg)$/,
-        include: [assetsPath],
-        use: [
-          {
-            loader: 'file-loader',
-            options: {
-              name: '[name].[ext]',
-              outputPath: 'static/assets/', // a path in .next/server/
-              publicPath: '/_next/static/assets/' // a path that can be accessed from the browser
-            }
-          }
-        ]
-      })
-    }
-    
+  webpack: (config, { isServer, webpack }) => {
+    config.externals.push({
+      'canvas': 'commonjs canvas',
+      'bufferutil': 'commonjs bufferutil',
+      'utf-8-validate': 'commonjs utf-8-validate',
+    });
+    config.module.rules.push({
+        test: /\.wasm$/,
+        type: 'asset/resource'
+    });
+    config.plugins.push(new webpack.ProvidePlugin({
+        Buffer: ['buffer', 'Buffer'],
+    }));
     return config
   }
 };
