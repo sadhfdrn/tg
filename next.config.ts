@@ -35,8 +35,8 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: '/anime-proxy/:path*',
-        destination: 'https://luffy.animeowl.me/:path*',
+        source: '/api/anime-proxy',
+        destination: 'https://luffy.animeowl.me/',
       },
     ]
   },

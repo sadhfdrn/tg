@@ -21,16 +21,17 @@ if (!fs.existsSync(tempDir)) {
 }
 
 let ffmpeg: FFmpeg | null = null;
-async function getFFmpeg() {
+async function getFFmpeg(onProgress?: ProgressCallback) {
     if (!ffmpeg) {
         ffmpeg = new FFmpeg();
-        // This is a simplified progress handler. In a real app, you might want to use the onProgress callback.
         ffmpeg.on('log', ({ message }) => {
-            console.log(message);
+            // console.log(message); // Useful for debugging ffmpeg commands
         });
+        await onProgress?.({ message: 'Loading video processor...' });
         await ffmpeg.load({
              coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js'
         });
+        await onProgress?.({ message: 'Video processor loaded!' });
     }
     return ffmpeg;
 }
@@ -164,9 +165,13 @@ async function getWatermarkBuffer(text: string, style: string): Promise<Buffer> 
     }
     const svgTemplate = await fs.promises.readFile(devPath, 'utf-8');
     const finalSvg = svgTemplate.replace(/TEXT_PLACEHOLDER/g, text);
-    // Use sharp to get a PNG buffer from SVG
-    const { default: sharp } = await import('sharp');
-    return sharp(Buffer.from(finalSvg)).png().toBuffer();
+    // Cannot use sharp, must use ffmpeg for everything.
+    // Instead of rendering SVG to PNG, we'll try to use the SVG directly if possible,
+    // or find a pure JS way to convert it if needed.
+    // For now, let's assume ffmpeg can handle SVG overlays if we write it to a file.
+    const tempSvgPath = path.join(tempDir, `watermark_${Date.now()}.svg`);
+    await fs.promises.writeFile(tempSvgPath, finalSvg);
+    return fs.promises.readFile(tempSvgPath);
 }
 
 function getFfmpegOverlay(position: WatermarkPosition = 'bottom-right'): string {
@@ -183,29 +188,28 @@ function getFfmpegOverlay(position: WatermarkPosition = 'bottom-right'): string 
 }
 
 async function addWatermarkToVideo(inputPath: string, outputPath: string, watermarkText: string, watermarkStyle: string, watermarkPosition: WatermarkPosition, onProgress?: ProgressCallback): Promise<string> {
-    const ffmpeg = await getFFmpeg();
-    if(onProgress) await onProgress({ message: 'Applying watermark...' });
+    const ffmpeg = await getFFmpeg(onProgress);
     
-    const watermarkPngBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
+    // We get a buffer, but it's an SVG buffer. Let's write it to a file ffmpeg can read.
+    const svgBuffer = await getWatermarkBuffer(watermarkText, watermarkStyle);
     
-    const inputFilename = path.basename(inputPath);
-    const watermarkFilename = `watermark_${Date.now()}.png`;
+    const inputFilename = `input_${path.basename(inputPath)}`;
+    const watermarkFilename = `watermark_${Date.now()}.svg`;
 
     await ffmpeg.writeFile(inputFilename, await fetchFile(inputPath));
-    await ffmpeg.writeFile(watermarkFilename, watermarkPngBuffer);
+    await ffmpeg.writeFile(watermarkFilename, svgBuffer);
     
     const overlayCommand = getFfmpegOverlay(watermarkPosition);
 
     ffmpeg.on('progress', (progress) => {
         if (onProgress) {
-            // ffmpeg.wasm progress is based on time, not percentage
             onProgress({ message: 'Applying watermark...', percentage: progress.progress * 100 });
         }
     });
 
     await ffmpeg.exec(['-i', inputFilename, '-i', watermarkFilename, '-filter_complex', `[1:v]scale=iw*0.25:-1[wm];[0:v][wm]${overlayCommand}`, '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy', 'output.mp4']);
     
-    if(onProgress) await onProgress({ message: 'Applying watermark...', percentage: 100 });
+    if(onProgress) await onProgress({ message: 'Watermark applied!', percentage: 100 });
 
     const data = await ffmpeg.readFile('output.mp4');
     await fs.promises.writeFile(outputPath, data as Uint8Array);
@@ -234,9 +238,7 @@ async function processMediaFiles(mediaFiles: { path: string, type: 'video' | 'im
             if (mediaFile.type === 'video') {
                 await addWatermarkToVideo(mediaFile.path, outputPath, watermarkText, watermarkStyle, watermarkPosition, singleFileProgress);
             } else {
-                // Image watermarking is not supported by ffmpeg.wasm, skipping
                  if(onProgress) await onProgress({ message: `Skipping watermark for image ${i + 1}` });
-                 // Just copy the file
                  await fs.promises.copyFile(mediaFile.path, outputPath);
             }
             processedFiles.push({ path: outputPath, type: mediaFile.type, index: mediaFile.index, originalPath: mediaFile.path });
