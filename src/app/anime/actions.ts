@@ -1,7 +1,7 @@
 'use server';
 
-import AnimeOwl from '@/../consumet.ts/src/providers/anime/animeowl';
-import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/../consumet.ts/src/models';
+import AnimeOwl from '@/../consumet/src/providers/anime/animeowl';
+import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/../consumet/src/models';
 
 const animeowl = new AnimeOwl();
 
