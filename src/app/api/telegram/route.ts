@@ -4,7 +4,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/app/anime/actions';
-import { IAnimeResult, IAnimeInfo } from '@/../consumet.ts/src/models';
+import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/../consumet.ts/src/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -14,7 +14,7 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
 interface UserState {
-    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete' | 'awaiting_anime_name' | 'awaiting_anime_selection' | 'awaiting_episode_selection';
+    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete' | 'awaiting_anime_name' | 'awaiting_anime_selection' | 'awaiting_subdub_selection' | 'awaiting_episode_selection';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
@@ -24,6 +24,7 @@ interface UserState {
     animeSearchIndex?: number;
     animeInfo?: IAnimeInfo;
     currentMessageId?: number;
+    selectedSubOrDub?: SubOrSub;
 }
 
 const userStates: Record<string, UserState> = {};
@@ -80,13 +81,14 @@ async function sendPhoto(chatId: string | number, photo: string, caption: string
 }
 
 
-async function editMessage(chatId: string | number, messageId: number, text: string) {
+async function editMessage(chatId: string | number, messageId: number, text: string, reply_markup?: any) {
     try {
         await axios.post(`${TELEGRAM_API_URL}/editMessageText`, {
             chat_id: chatId,
             message_id: messageId,
             text: text,
-            parse_mode: 'Markdown'
+            parse_mode: 'Markdown',
+            reply_markup: reply_markup
         });
     } catch (error) {
         // Don't log "message is not modified" errors, as they are common and not critical.
@@ -276,6 +278,16 @@ function getAnimeNavigationKeyboard(currentIndex: number, totalResults: number) 
 }
 
 
+function getSubDubKeyboard() {
+    return {
+        inline_keyboard: [[
+            { text: 'Subbed', callback_data: 'anime_subdub_sub'},
+            { text: 'Dubbed', callback_data: 'anime_subdub_dub'}
+        ]]
+    };
+}
+
+
 async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
     const results = state.animeSearchResults;
     if (!results || results.length === 0) {
@@ -286,7 +298,8 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
 
     const currentIndex = state.animeSearchIndex || 0;
     const anime = results[currentIndex];
-    const caption = `*${anime.title}*\n\n${anime.lastChapter || ''}\n\n*Description:* Not available for this provider.`;
+    const title = typeof anime.title === 'string' ? anime.title : anime.title.english || anime.title.romaji;
+    const caption = `*${title}*\n\nTotal Chapters: ${anime.lastChapter || 'N/A'}\n\n*Description:* Not available for this provider.`;
     const photoUrl = anime.image || 'https://via.placeholder.com/225x350.png?text=No+Image';
     const reply_markup = getAnimeNavigationKeyboard(currentIndex, results.length);
 
@@ -328,6 +341,7 @@ async function processIncomingMessage(chatId: string, text: string) {
         state.animeSearchIndex = undefined;
         state.animeInfo = undefined;
         state.currentMessageId = undefined;
+        state.selectedSubOrDub = undefined;
         await sendMessage(chatId, "Action cancelled. Returning to the main menu.", getMainMenuKeyboard());
         return;
     }
@@ -507,7 +521,7 @@ async function processIncomingMessage(chatId: string, text: string) {
         return;
     }
     
-    if (trimmedText === '/anime') {
+    if (trimmedText === '/anime' || trimmedText === '😎 Anime') {
         state.step = 'awaiting_anime_name';
         await sendMessage(chatId, "What anime are you looking for?");
         return;
@@ -529,12 +543,59 @@ async function processIncomingMessage(chatId: string, text: string) {
     }
 }
 
+async function presentEpisodeSelection(chatId: string, state: UserState) {
+    if (!state.animeInfo || !state.selectedSubOrDub) {
+        await sendMessage(chatId, "Something went wrong, please start the anime search again.");
+        state.step = 'idle';
+        return;
+    }
+    state.step = 'awaiting_episode_selection';
+    const info = state.animeInfo;
+
+    // Filter episodes based on Sub/Dub selection
+    const availableEpisodes = info.episodes?.filter(ep => 
+        state.selectedSubOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
+    ) || [];
+
+    if (availableEpisodes.length === 0) {
+        await editMessage(chatId, state.currentMessageId!, `*${typeof info.title === 'string' ? info.title : info.title.english}*\n\nSorry, no episodes found for the selected version.`, getMainMenuKeyboard());
+        state.step = 'idle';
+        return;
+    }
+
+    const episodeButtons = availableEpisodes.map(ep => ({ text: `Episode ${ep.number}` }));
+    
+    const rows = [];
+    for (let i = 0; i < episodeButtons.length; i += 3) {
+        rows.push(episodeButtons.slice(i, i + 3));
+    }
+
+    rows.push([{ text: 'All Episodes' }]);
+    rows.push([{ text: '✅ Confirm Download' }, { text: '❌ Cancel' }]);
+
+    await editMessage(chatId, state.currentMessageId!, `Found *${availableEpisodes.length}* episodes for *${typeof info.title === 'string' ? info.title : info.title.english}*. Please make your selection.`);
+    
+    await sendMessage(chatId, `Which *${state.selectedSubOrDub}* episodes would you like to download?`, {
+        keyboard: rows,
+        one_time_keyboard: true,
+        resize_keyboard: true,
+    });
+}
+
 async function processCallbackQuery(callbackQuery: any) {
     const chatId = callbackQuery.message.chat.id.toString();
     const state = getUserState(chatId);
     const data = callbackQuery.data;
 
     await answerCallbackQuery(callbackQuery.id);
+
+    if (data.startsWith('anime_subdub_')) {
+        if(state.step !== 'awaiting_subdub_selection') return;
+
+        state.selectedSubOrDub = data.split('_').pop() as SubOrSub;
+        await presentEpisodeSelection(chatId, state);
+        return;
+    }
 
     if (state.step !== 'awaiting_anime_selection') return;
 
@@ -548,35 +609,33 @@ async function processCallbackQuery(callbackQuery: any) {
     } else if (data === 'anime_select') {
         const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
         
-        if (state.currentMessageId) await deleteMessage(chatId, state.currentMessageId);
-        const loadingMsgId = await sendMessage(chatId, `Fetching details for *${selectedAnime.title}*...`);
+        const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : selectedAnime.title.english || selectedAnime.title.romaji;
+        if (state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
+        else state.currentMessageId = await sendMessage(chatId, `Fetching details for *${title}*...`);
         
         try {
             const info = await getAnimeInfo(selectedAnime.id);
             state.animeInfo = info;
-            state.step = 'awaiting_episode_selection';
 
-            const episodeButtons = (info.episodes || []).map(ep => ({ text: `Episode ${ep.number}`}));
-            
-            const rows = [];
-            for (let i = 0; i < episodeButtons.length; i += 3) {
-                rows.push(episodeButtons.slice(i, i + 3));
+            const hasSub = info.episodes?.some(ep => ep.isSubbed);
+            const hasDub = info.episodes?.some(ep => ep.isDubbed);
+
+            if (hasSub && hasDub) {
+                state.step = 'awaiting_subdub_selection';
+                await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard());
+            } else if (hasSub) {
+                state.selectedSubOrDub = SubOrSub.SUB;
+                await presentEpisodeSelection(chatId, state);
+            } else if (hasDub) {
+                state.selectedSubOrDub = SubOrSub.DUB;
+                await presentEpisodeSelection(chatId, state);
+            } else {
+                await editMessage(chatId, state.currentMessageId!, `Sorry, no watchable episodes found for *${title}*.`);
+                state.step = 'idle';
             }
-
-            rows.push([{ text: 'All Episodes' }]);
-            rows.push([{ text: '✅ Confirm Download' }, { text: '❌ Cancel' }]);
-
-            if (loadingMsgId) await editMessage(chatId, loadingMsgId, `Found *${info.episodes?.length || 0}* episodes for *${info.title}*. Please make your selection.`);
-            
-            await sendMessage(chatId, 'Which episodes would you like to download?', {
-                keyboard: rows,
-                one_time_keyboard: true,
-                resize_keyboard: true,
-            });
-
         } catch (error) {
             console.error(error);
-            if(loadingMsgId) await editMessage(chatId, loadingMsgId, `Could not fetch details for *${selectedAnime.title}*.`);
+            if(state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Could not fetch details for *${title}*.`);
         }
     }
 }
