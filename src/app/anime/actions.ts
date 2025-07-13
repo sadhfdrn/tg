@@ -1,14 +1,16 @@
 'use server';
 
-import AnimeOwl from '@/../consumet/src/providers/anime/animeowl';
-import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/../consumet/src/models';
+import AnimeOwl from '../../../consumet/src/providers/anime/animeowl';
+import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '../../../consumet/src/models';
 
 const animeowl = new AnimeOwl();
 
 export async function searchAnime(query: string): Promise<ISearch<IAnimeResult>> {
   try {
     const res = await animeowl.search(query);
-    return res;
+    // Ensure image URLs are valid and filter out results without an image
+    const validResults = res.results.filter(item => item.image && item.image.startsWith('http'));
+    return { ...res, results: validResults };
   } catch (err) {
     console.error(err);
     throw new Error('Failed to search for anime.');

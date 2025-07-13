@@ -4,7 +4,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/app/anime/actions';
-import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/consumet/src/models';
+import { IAnimeResult, IAnimeInfo, SubOrSub } from '../../../consumet/src/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
