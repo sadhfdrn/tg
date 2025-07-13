@@ -1,7 +1,7 @@
 'use server';
 
-import AnimeOwl from '../../../consumet/src/providers/anime/animeowl';
-import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '../../../consumet/src/models';
+import AnimeOwl from '@/lib/consumet.ts/src/providers/anime/animeowl';
+import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/lib/consumet.ts/src/models';
 
 const animeowl = new AnimeOwl();
 
@@ -9,7 +9,7 @@ export async function searchAnime(query: string): Promise<ISearch<IAnimeResult>>
   try {
     const res = await animeowl.search(query);
     // Ensure image URLs are valid and filter out results without an image
-    const validResults = res.results.filter(item => item.image && item.image.startsWith('http'));
+    const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
     return { ...res, results: validResults };
   } catch (err) {
     console.error(err);
