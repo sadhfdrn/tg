@@ -18,7 +18,21 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'animeowl.me',
+        port: '',
+        pathname: '/**',
+      }
     ],
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/anime-proxy/:path*',
+        destination: 'https://luffy.animeowl.me/:path*',
+      },
+    ]
   },
   output: 'standalone',
   webpack: (config, { isServer }) => {
