@@ -1,4 +1,3 @@
-
 'use client';
 import { useState } from 'react';
 import Image from 'next/image';
@@ -13,10 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from './actions';
 import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
-type AnimeProvider = 'animeowl' | 'animepahe';
 
 export default function AnimePage() {
   const { toast } = useToast();
@@ -25,34 +22,34 @@ export default function AnimePage() {
   const [loading, setLoading] = useState(false);
   const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
   const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
-  const [provider, setProvider] = useState<AnimeProvider>('animeowl');
 
   const handleSearch = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setSearchResults(null);
     try {
-      const results = await searchAnime(query, provider);
+      const results = await searchAnime(query);
       setSearchResults(results);
       if (results.results) {
         results.results.forEach((anime, index) => {
           if (!anime.info) {
-            handleFetchInfo(anime.id, index, provider);
+            handleFetchInfo(anime.id, index);
           }
         });
       }
     } catch (error) {
       console.error(error);
-      toast({ title: 'Error', description: 'Failed to search for anime.', variant: 'destructive' });
+      const errorMessage = (error instanceof Error) ? error.message : 'Failed to search for anime.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFetchInfo = async (animeId: string, index: number, provider: AnimeProvider) => {
+  const handleFetchInfo = async (animeId: string, index: number) => {
     setInfoLoading(prev => ({ ...prev, [animeId]: true }));
     try {
-      const info = await getAnimeInfo(animeId, provider);
+      const info = await getAnimeInfo(animeId);
       setSearchResults(prev => {
         if (!prev) return null;
         const newResults = [...prev.results];
@@ -61,16 +58,17 @@ export default function AnimePage() {
       });
     } catch (error) {
       console.error(error);
-      toast({ title: 'Error', description: 'Failed to fetch anime details.', variant: 'destructive' });
+      const errorMessage = (error instanceof Error) ? error.message : 'Failed to fetch anime details.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
     } finally {
       setInfoLoading(prev => ({ ...prev, [animeId]: false }));
     }
   };
 
-  const handleDownload = async (episodeId: string, episodeTitle: string, provider: AnimeProvider) => {
+  const handleDownload = async (episodeId: string, episodeTitle: string) => {
     setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
     try {
-      const sources = await getEpisodeSources(episodeId, provider);
+      const sources = await getEpisodeSources(episodeId);
       const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
       
       if (!source?.url) {
@@ -125,15 +123,6 @@ export default function AnimePage() {
               placeholder="Search for an anime..."
               className="flex-grow"
             />
-            <Select value={provider} onValueChange={(value: AnimeProvider) => setProvider(value)}>
-                <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Provider" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="animeowl">AnimeOwl</SelectItem>
-                    <SelectItem value="animepahe">AnimePahe</SelectItem>
-                </SelectContent>
-            </Select>
             <Button onClick={handleSearch} disabled={loading}>
               {loading ? <Loader className="animate-spin" /> : <Search />}
             </Button>
@@ -178,7 +167,7 @@ export default function AnimePage() {
                                 {anime.info.episodes?.map(ep => (
                                   <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
                                     <span className="text-sm">{ep.title}</span>
-                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`, provider)} disabled={sourceLoading[ep.id]}>
+                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
                                       {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
                                     </Button>
                                   </li>

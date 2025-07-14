@@ -1,13 +1,192 @@
-Animepahe
+'use client';
+import { useState } from 'react';
+import Image from 'next/image';
+import { Search, Loader, Download } from 'lucide-react';
 
-__ddg9_=105.113.112.2;__ddg1_=hrqmeueDeEfV4D9JokFm;XSRF-TOKEN=eyJpdiI6IkdWTGsrd3gyUDVoYmN2Y3k5OHhYNlE9PSIsInZhbHVlIjoibEFHZGl6YlhiV1NhT3lKU09WTkVvRFVzQjNvcXZ0bTFKZkhmYmllMkI5RkN6VDRzejEzZFBMVkFxelpGb3h4MzJBRFNrYTN3WWtMVmpweHQxMCtzY01oWmxYMFFxZSs3RmFmM1VJdCtLejlVMlNjUXkrL2R2Wm9lUmpiVDJEZisiLCJtYWMiOiIxZWEyYmM4YjBlNjYxY2ZjY2NlMDljNDZhOTAwZjQ3NjllMDRjZjIxZTkzMWMyNmMxZDE3MzZlOWJmOWE3NDhlIiwidGFnIjoiIn0%3D;res=720;aud=jpn;__ddg10_=1752512540;__ddg2_=fjcjXMPV3K7DhTnm;__ddg8_=QUmgibBrVNjdTKX7;__ddgid_=123rZINbdq2r0aTg;__ddgmark_=CF2zy59wxHYhBBCz;av1=0;laravel_session=eyJpdiI6IkhaVjExYUNyTUVIK2Rkd2xCTmUwTWc9PSIsInZhbHVlIjoibUk1TjBadTVyR29vUXZxK1l3TkRWa2tHczdrN09DTmdpbVdqVjNvazZ5VkcySmlVdEo2d1Q2M2xwSTFmMGxNWWZKeGpNckMxeW5tTm1oODZqVGVXYWpRUWJRT3VTQjFsaGcrd0loTGk5bkgvdGo2Uk1PUGJPYU1WWjJoMlYxZmsiLCJtYWMiOiIyODgxZjZmOTk0MzA2NDAzYWZkMzk2MDlkZmRiN2UzZDZhNDU3OWUyODY4ZGUxNjdmM2FlOWRiYjA3ZTc2ZThmIiwidGFnIjoiIn0%3D;latest=5754
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { searchAnime, getAnimeInfo, getEpisodeSources } from './actions';
+import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
 
+type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
 
-Pahewin
+export default function AnimePage() {
+  const { toast } = useToast();
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ISearch<AnimeResultWithInfo> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
+  const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
 
-pp_main_c23cce7e1ae0d23292c80bcc7276b59b=1;pbpr0tpuw4isk85t8yg3jb2lj5vqf=rashcolonizeexpand.com;PHPSESSID=54b1c181e223a2ceb3fe32056e102e58;pp_delay_c23cce7e1ae0d23292c80bcc7276b59b=1;sb_count_5e665a97aec27d3d9d2ec573a80ea0bf=3;cf_clearance=Lfav1PXdUbHt_GXVMHTAWk4NFEzGwxNv8VKgHHa0TFk-1752512516-1.2.1.1-6WbVLDVaBpRVCU99Rpj9zbbW7OdgUGFU_aTBNMrs8KqVDjMq3L_P6hXevyBFaO2nlFJM8vt88sG3wXn_8vd4miGD5QZcdh9ua5cwuYOM4HECf3LY7acTccpBBxsS8YS96tjnD_M3.VQ_EBdteKVi7S8FsPhS2VUgh6Sn7_fc0ScO6jJWQC7TnqOjENkEtxGkwlAJgnhW99JIlMHXKl_XM1O1z1DPfLdT3UoKJTXgaKU;dom3ic8zudi28v8lr6fgphwffqoz0j6c=4d4f2a38-5dc3-436c-8ffd-5527807c998b%3A3%3A1;pp_sub_c23cce7e1ae0d23292c80bcc7276b59b=4;sb_delay_5e665a97aec27d3d9d2ec573a80ea0bf=1;sb_main_5e665a97aec27d3d9d2ec573a80ea0bf=1;SERVERID=janna
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setSearchResults(null);
+    try {
+      const results = await searchAnime(query);
+      setSearchResults(results);
+      if (results.results) {
+        results.results.forEach((anime, index) => {
+          if (!anime.info) {
+            handleFetchInfo(anime.id, index);
+          }
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error instanceof Error) ? error.message : 'Failed to search for anime.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleFetchInfo = async (animeId: string, index: number) => {
+    setInfoLoading(prev => ({ ...prev, [animeId]: true }));
+    try {
+      const info = await getAnimeInfo(animeId);
+      setSearchResults(prev => {
+        if (!prev) return null;
+        const newResults = [...prev.results];
+        newResults[index] = { ...newResults[index], info };
+        return { ...prev, results: newResults };
+      });
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error instanceof Error) ? error.message : 'Failed to fetch anime details.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setInfoLoading(prev => ({ ...prev, [animeId]: false }));
+    }
+  };
 
-Kwik
+  const handleDownload = async (episodeId: string, episodeTitle: string) => {
+    setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
+    try {
+      const sources = await getEpisodeSources(episodeId);
+      const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
+      
+      if (!source?.url) {
+        throw new Error('No download source found.');
+      }
+      
+      toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
+      
+      const response = await fetch(`/api/anime-proxy?url=${encodeURIComponent(source.url)}`);
+      if (!response.ok) {
+        throw new Error(`Proxy error: ${response.statusText}`);
+      }
 
-pp_delay_3d109fd3a636c861f15e306e6cf44007=1;sb_main_e1010ee4b61613b1b253d71d1c531c2e=1;cf_clearance=Txd8WQg9xAFIWcu9UWyoe.TVZnK9H4g62HSm5FmbTrk-1752511536-1.2.1.1-f8tYP29C4cr5VsckDRvzGcBNULyHiYvvyBJj2vw_ufbNKwoamobPMEkP_ruANQpIpF5bTctqrauoghSCUVCy_7026jAudxZgIZ8XTvWaYoUhAxsh49rC3y3xEGmRlyvoy9N0iK3IKdWruP_ic7uURCZQIKm4WQWPYTzzoYzoTsFSAfOaR1jE8aYkE1BQsvTn8wGKYjxBJ.nrKkyWYLGpcaRkR2Lul1FcMuZZ3XTDmDE;dom3ic8zudi28v8lr6fgphwffqoz0j6c=86952573-838d-43c0-9ddf-d751d7fba3fb%3A3%3A1;kwik_session=eyJpdiI6ImNpVlNCWkZWWDJOcXJQQ25zemhRakE9PSIsInZhbHVlIjoiZjBRYjBLUXFKZjY0Y0ZLUEUwNTdONlVTRnhSMTQrYzdCcmpFQy94cEhienRjU3d0cWhNZGNVTFFMWFE2T2w1aUozNk1XUlRIZ0xuUnhDOU9HV0d4MnhoU3E5a0JXdS9kTndUTG5oZ1FvbFBIVzJvTWJBZHdZbDdHS0dPb0RUNW0iLCJtYWMiOiIzNzcxMDE3ZDI0NmIyYTMyNTFiNzA0MDFhOTI1OWNmYjRhYThkNjA2NzZiMjljNmNmMmY3YTM2NjE2MzgzY2QwIiwidGFnIjoiIn0%3D;pbpr0tpuw4isk85t8yg3jb2lj5vqf=loveplumbertailor.com;pp_main_3d109fd3a636c861f15e306e6cf44007=1;pp_sub_3d109fd3a636c861f15e306e6cf44007=1;sb_count_e1010ee4b61613b1b253d71d1c531c2e=2;sb_delay_e1010ee4b61613b1b253d71d1c531c2e=1;srv=s0
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
+      link.setAttribute('download', cleanTitle);
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      
+      toast({ title: 'Success', description: 'Download started.' });
+
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error instanceof Error) ? error.message : 'An unknown error occurred.';
+      toast({ title: 'Error', description: `Failed to start download: ${errorMessage}`, variant: 'destructive' });
+    } finally {
+      setSourceLoading(prev => ({ ...prev, [episodeId]: false }));
+    }
+  };
+
+  return (
+    <div className="flex justify-center items-start min-h-screen bg-muted/40 p-4">
+      <Card className="w-full max-w-4xl">
+        <CardHeader>
+          <CardTitle>Anime Downloader</CardTitle>
+          <CardDescription>Search for your favorite anime and download episodes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 mb-4">
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="Search for an anime..."
+              className="flex-grow"
+            />
+            <Button onClick={handleSearch} disabled={loading}>
+              {loading ? <Loader className="animate-spin" /> : <Search />}
+            </Button>
+          </div>
+
+          <ScrollArea className="h-[60vh] pr-4">
+            <div className="space-y-4">
+              {searchResults?.results.map((anime, index) => (
+                <Card key={anime.id} className="overflow-hidden">
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value={anime.id}>
+                      <AccordionTrigger
+                        className="p-4 hover:no-underline"
+                      >
+                        <div className="flex gap-4 items-center w-full">
+                          <Image
+                            src={anime.image || 'https://placehold.co/100x150.png'}
+                            alt={typeof anime.title === 'string' ? anime.title : (anime.title as any).english || ''}
+                            width={100}
+                            height={150}
+                            className="rounded-md object-cover"
+                          />
+                          <div className="text-left flex-grow">
+                            <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji}</h3>
+                            <div className="text-sm text-muted-foreground">{anime.type}</div>
+                          </div>
+                          {infoLoading[anime.id] && <Loader className="animate-spin mr-2" />}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="p-4 pt-0">
+                        {anime.info ? (
+                          <>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {anime.info.genres?.map(genre => (
+                                    <Badge key={genre} variant="secondary">{genre}</Badge>
+                                ))}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-4">{anime.info.description}</p>
+                            <h4 className="font-semibold mb-2">Episodes</h4>
+                            <ScrollArea className="h-64 pr-3">
+                              <ul className="space-y-2">
+                                {anime.info.episodes?.map(ep => (
+                                  <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
+                                    <span className="text-sm">{ep.title}</span>
+                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
+                                      {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </ScrollArea>
+                          </>
+                        ) : (
+                          <p>Loading details...</p>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

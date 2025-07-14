@@ -1,185 +1,192 @@
+'use client';
+import { useState } from 'react';
+import Image from 'next/image';
+import { Search, Loader, Download } from 'lucide-react';
 
-import { load } from 'cheerio';
-import {
-  ISearch,
-  IAnimeInfo,
-  MediaStatus,
-  IAnimeResult,
-  ISource,
-  IAnimeEpisode,
-  IEpisodeServer,
-  MediaFormat,
-} from './models';
-import AnimeParser from './anime-parser';
-import Kwik from './kwik';
-import { USER_AGENT, ANIMEPAHE_COOKIE } from './utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { searchAnime, getAnimeInfo, getEpisodeSources } from './actions';
+import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
 
-class AnimePahe extends AnimeParser {
-  override readonly name = 'AnimePahe';
-  protected override baseUrl = 'https://animepahe.ru';
-  protected override logo = 'https://animepahe.com/pikacon.ico';
-  protected override classPath = 'ANIME.AnimePahe';
+type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
 
-  private Headers() {
-    return {
-      'User-Agent': USER_AGENT,
-      'Referer': `${this.baseUrl}/`,
-      'Cookie': ANIMEPAHE_COOKIE,
-    };
-  }
+export default function AnimePage() {
+  const { toast } = useToast();
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ISearch<AnimeResultWithInfo> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
+  const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
 
-  override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setSearchResults(null);
     try {
-      const { data } = await this.client.get(
-        `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`,
-        {
-          headers: this.Headers(),
-        }
-      );
-      const res: ISearch<IAnimeResult> = {
-        results: [],
-      };
-      if (data.data) {
-        res.results = data.data.map((item: any) => ({
-          id: item.session,
-          title: item.title,
-          image: item.poster,
-          rating: item.score,
-          releaseDate: item.year,
-          type: item.type as MediaFormat,
-        }));
+      const results = await searchAnime(query);
+      setSearchResults(results);
+      if (results.results) {
+        results.results.forEach((anime, index) => {
+          if (!anime.info) {
+            handleFetchInfo(anime.id, index);
+          }
+        });
       }
-
-      return res;
-    } catch (err) {
-      throw new Error((err as Error).message);
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error instanceof Error) ? error.message : 'Failed to search for anime.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
-  override fetchAnimeInfo = async (id: string): Promise<IAnimeInfo> => {
-    const animeInfo: IAnimeInfo = {
-      id: id,
-      title: '',
-    };
-
+  const handleFetchInfo = async (animeId: string, index: number) => {
+    setInfoLoading(prev => ({ ...prev, [animeId]: true }));
     try {
-      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, { headers: this.Headers() });
-      const $ = load(res.data);
-
-      animeInfo.title = $('div.title-wrapper > h1 > span').first().text();
-      animeInfo.image = $('div.anime-poster a').attr('href');
-      animeInfo.description = $('div.anime-summary').text().trim();
-      animeInfo.genres = $('div.anime-genre ul li')
-        .map((i, el) => $(el).find('a').attr('title'))
-        .get();
-      animeInfo.hasSub = true;
-
-      switch ($('div.anime-info p:icontains("Status:") a').text().trim()) {
-        case 'Currently Airing':
-          animeInfo.status = MediaStatus.ONGOING;
-          break;
-        case 'Finished Airing':
-          animeInfo.status = MediaStatus.COMPLETED;
-          break;
-        default:
-          animeInfo.status = MediaStatus.UNKNOWN;
-      }
-      animeInfo.type = $('div.anime-info > p:contains("Type:") > a')
-        .text()
-        .trim()
-        .toUpperCase() as MediaFormat;
-
-      const { data } = await this.client.get(
-        `${this.baseUrl}/api?m=release&id=${id}&sort=episode_asc&page=1`,
-        { headers: this.Headers() }
-      );
-
-      animeInfo.totalEpisodes = data.total;
-      animeInfo.episodes = data.data.map(
-        (item: any): IAnimeEpisode => ({
-          id: `${id}/${item.session}`,
-          number: item.episode,
-          title: item.title,
-          image: item.snapshot,
-          duration: item.duration,
-          url: `${this.baseUrl}/play/${id}/${item.session}`,
-        })
-      );
-
-      return animeInfo;
-    } catch (err) {
-      throw new Error((err as Error).message);
-    }
-  };
-
-  override fetchEpisodeSources = async (episodeId: string): Promise<ISource> => {
-    try {
-      const { data } = await this.client.get(`${this.baseUrl}/play/${episodeId}`, {
-        headers: this.Headers(),
+      const info = await getAnimeInfo(animeId);
+      setSearchResults(prev => {
+        if (!prev) return null;
+        const newResults = [...prev.results];
+        newResults[index] = { ...newResults[index], info };
+        return { ...prev, results: newResults };
       });
-
-      const $ = load(data);
-
-      const links = $('div#resolutionMenu > button')
-        .map((i, el) => ({
-          url: $(el).attr('data-src')!,
-          quality: $(el).text(),
-          audio: $(el).attr('data-audio'),
-        }))
-        .get();
-
-      const iSource: ISource = {
-        headers: { Referer: 'https://kwik.cx/' },
-        sources: [],
-      };
-
-      const extractor = new Kwik();
-      for (const link of links) {
-          const pahewinUrl = new URL(link.url);
-          // Handle the pahe.win redirect page
-          const pahewinRes = await this.client.get(pahewinUrl.href, {
-              headers: {
-                  "Referer": this.baseUrl,
-              }
-          });
-          
-          const $$ = load(pahewinRes.data);
-          const form = $$('form');
-          const formaction = form.attr('action');
-          const formMethod = form.attr('method');
-          const token = form.find('input[name="_token"]').attr('value');
-          if(!formaction) {
-            throw new Error("Could not find form action on pahe.win")
-          }
-
-          const finalRedirect = await this.client({
-            method: formMethod as "GET" | "POST",
-            url: formaction,
-            headers: {
-                "Referer": pahewinUrl.href,
-                "Cookie": process.env.PAHEWIN_COOKIE,
-            },
-            data: new URLSearchParams({_token: token!})
-          });
-
-          const finalUrl = new URL(finalRedirect.request.res.responseUrl);
-
-          const res = await extractor.extract(finalUrl);
-          if (res[0]) {
-              res[0].quality = link.quality;
-              iSource.sources.push(res[0]);
-          }
-      }
-
-      return iSource;
-    } catch (err) {
-      throw new Error((err as Error).message);
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error instanceof Error) ? error.message : 'Failed to fetch anime details.';
+      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setInfoLoading(prev => ({ ...prev, [animeId]: false }));
     }
   };
 
-  override fetchEpisodeServers = (episodeLink: string): Promise<IEpisodeServer[]> => {
-    throw new Error('Method not implemented.');
-  };
-}
+  const handleDownload = async (episodeId: string, episodeTitle: string) => {
+    setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
+    try {
+      const sources = await getEpisodeSources(episodeId);
+      const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
+      
+      if (!source?.url) {
+        throw new Error('No download source found.');
+      }
+      
+      toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
+      
+      const response = await fetch(`/api/anime-proxy?url=${encodeURIComponent(source.url)}`);
+      if (!response.ok) {
+        throw new Error(`Proxy error: ${response.statusText}`);
+      }
 
-export default AnimePahe;
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
+      link.setAttribute('download', cleanTitle);
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      
+      toast({ title: 'Success', description: 'Download started.' });
+
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error instanceof Error) ? error.message : 'An unknown error occurred.';
+      toast({ title: 'Error', description: `Failed to start download: ${errorMessage}`, variant: 'destructive' });
+    } finally {
+      setSourceLoading(prev => ({ ...prev, [episodeId]: false }));
+    }
+  };
+
+  return (
+    <div className="flex justify-center items-start min-h-screen bg-muted/40 p-4">
+      <Card className="w-full max-w-4xl">
+        <CardHeader>
+          <CardTitle>Anime Downloader</CardTitle>
+          <CardDescription>Search for your favorite anime and download episodes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 mb-4">
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="Search for an anime..."
+              className="flex-grow"
+            />
+            <Button onClick={handleSearch} disabled={loading}>
+              {loading ? <Loader className="animate-spin" /> : <Search />}
+            </Button>
+          </div>
+
+          <ScrollArea className="h-[60vh] pr-4">
+            <div className="space-y-4">
+              {searchResults?.results.map((anime, index) => (
+                <Card key={anime.id} className="overflow-hidden">
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value={anime.id}>
+                      <AccordionTrigger
+                        className="p-4 hover:no-underline"
+                      >
+                        <div className="flex gap-4 items-center w-full">
+                          <Image
+                            src={anime.image || 'https://placehold.co/100x150.png'}
+                            alt={typeof anime.title === 'string' ? anime.title : (anime.title as any).english || ''}
+                            width={100}
+                            height={150}
+                            className="rounded-md object-cover"
+                          />
+                          <div className="text-left flex-grow">
+                            <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji}</h3>
+                            <div className="text-sm text-muted-foreground">{anime.type}</div>
+                          </div>
+                          {infoLoading[anime.id] && <Loader className="animate-spin mr-2" />}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="p-4 pt-0">
+                        {anime.info ? (
+                          <>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {anime.info.genres?.map(genre => (
+                                    <Badge key={genre} variant="secondary">{genre}</Badge>
+                                ))}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-4">{anime.info.description}</p>
+                            <h4 className="font-semibold mb-2">Episodes</h4>
+                            <ScrollArea className="h-64 pr-3">
+                              <ul className="space-y-2">
+                                {anime.info.episodes?.map(ep => (
+                                  <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
+                                    <span className="text-sm">{ep.title}</span>
+                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
+                                      {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </ScrollArea>
+                          </>
+                        ) : (
+                          <p>Loading details...</p>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -2,55 +2,36 @@
 'use server';
 
 import AnimeOwl from '@/lib/anime-scrapper/animeowl';
-import AnimePahe from '@/lib/anime-scrapper/animepahe';
 import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/lib/anime-scrapper/models';
 
 const animeowl = new AnimeOwl();
-const animepahe = new AnimePahe();
 
-type AnimeProvider = 'animeowl' | 'animepahe';
-
-function getProvider(provider: AnimeProvider) {
-    switch (provider) {
-        case 'animeowl':
-            return animeowl;
-        case 'animepahe':
-            return animepahe;
-        default:
-            return animeowl;
-    }
-}
-
-export async function searchAnime(query: string, provider: AnimeProvider): Promise<ISearch<IAnimeResult>> {
+export async function searchAnime(query: string): Promise<ISearch<IAnimeResult>> {
   try {
-    const activeProvider = getProvider(provider);
-    const res = await activeProvider.search(query);
+    const res = await animeowl.search(query);
     const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
     return { ...res, results: validResults };
   } catch (err: any) {
     console.error(err);
-    throw new Error(err.message || `Failed to search for anime on ${provider}.`);
+    throw new Error(err.message || `Failed to search for anime on AnimeOwl.`);
   }
 }
 
-export async function getAnimeInfo(id: string, provider: AnimeProvider): Promise<IAnimeInfo> {
+export async function getAnimeInfo(id: string): Promise<IAnimeInfo> {
   try {
-    const activeProvider = getProvider(provider);
-    const res = await activeProvider.fetchAnimeInfo(id);
+    const res = await animeowl.fetchAnimeInfo(id);
     return res;
   } catch (err: any) {
     console.error(err);
-    throw new Error(err.message || `Failed to get anime info from ${provider}.`);
+    throw new Error(err.message || `Failed to get anime info from AnimeOwl.`);
   }
 }
 
-export async function getEpisodeSources(episodeId: string, provider: AnimeProvider): Promise<ISource> {
+export async function getEpisodeSources(episodeId: string): Promise<ISource> {
   try {
-    const activeProvider = getProvider(provider);
-    const res = await activeProvider.fetchEpisodeSources(episodeId);
+    const res = await animeowl.fetchEpisodeSources(episodeId);
     return res;
   } catch (err: any) {
     console.error(err);
-    throw new Error(err.message || `Failed to get episode sources from ${provider}.`);
+    throw new Error(err.message || `Failed to get episode sources from AnimeOwl.`);
   }
-}
