@@ -409,7 +409,13 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
         return;
     }
 
-    const episodeButtons = episodesToShow.map(ep => ({ text: `Ep ${ep.number}`, callback_data: `anime_ep_${ep.id}` }));
+    const episodeButtons = episodesToShow.map(ep => {
+        const episodeIds = ep.id.split('$')[1];
+        const subId = episodeIds.split('&')[0] || '';
+        const dubId = episodeIds.split('&')[1] || '';
+        const finalId = state.selectedSubOrDub === SubOrSub.SUB ? subId : dubId;
+        return { text: `Ep ${ep.number}`, callback_data: `anime_ep_${ep.id.split('$')[0]}$${finalId}` }
+    });
     
     const rows = [];
     for (let i = 0; i < episodeButtons.length; i += 4) { // 4 buttons per row
@@ -417,7 +423,17 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     }
 
     const episodeRangeEnd = Math.min(end, allAvailableEpisodes.length);
-    rows.push([{ text: `All ${start + 1}-${episodeRangeEnd}`, callback_data: `anime_ep_all_${start}_${episodeRangeEnd}` }]);
+    const allEpisodeIds = episodesToShow.map(ep => {
+         const episodeIds = ep.id.split('$')[1];
+         const subId = episodeIds.split('&')[0] || '';
+         const dubId = episodeIds.split('&')[1] || '';
+         const finalId = state.selectedSubOrDub === SubOrSub.SUB ? subId : dubId;
+         return `${ep.id.split('$')[0]}$${finalId}`;
+    });
+
+    if (episodesToShow.length > 1) {
+       rows.push([{ text: `All ${start + 1}-${episodeRangeEnd}`, callback_data: `anime_ep_all_${allEpisodeIds.join('&')}` }]);
+    }
     
     const navButtons = [];
     if (allAvailableEpisodes.length > EPISODE_GROUP_SIZE) {
@@ -650,7 +666,7 @@ async function processIncomingMessage(chatId: string, text: string) {
     }
 }
 
-async function handleAnimeEpisodeDownload(chatId: string, episodeId: string) {
+async function handleAnimeEpisodeDownload(chatId: string, episodeId: string, request: Request) {
     const statusMessageId = await sendMessage(chatId, "⏳ Fetching episode sources...");
     try {
         const sources = await getEpisodeSources(episodeId);
@@ -663,13 +679,14 @@ async function handleAnimeEpisodeDownload(chatId: string, episodeId: string) {
         
         if (statusMessageId) await editMessage(chatId, statusMessageId, `✅ Source found! Sending video now... (This may take a moment)`);
         
-        // Use sendVideo endpoint
+        const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+        const proxyUrl = `https://${host}/api/anime-proxy?url=${encodeURIComponent(defaultSource.url)}`;
+        
+        // Use sendVideo endpoint with our proxied URL
         const response = await axios.post(`${TELEGRAM_API_URL}/sendVideo`, {
             chat_id: chatId,
-            video: defaultSource.url,
+            video: proxyUrl,
             caption: `Episode download`,
-            // Not all videos might have these, so send request without them first.
-            // supports_streaming: true, 
         });
 
         // If the video was sent successfully, we can delete the status message.
@@ -677,7 +694,7 @@ async function handleAnimeEpisodeDownload(chatId: string, episodeId: string) {
             if (statusMessageId) await deleteMessage(chatId, statusMessageId);
         } else {
             // If sending video fails (e.g., too large), send the link instead.
-            if (statusMessageId) await editMessage(chatId, statusMessageId, `⚠️ Video could not be sent directly. Here is the download link:\n\n${defaultSource.url}`);
+            if (statusMessageId) await editMessage(chatId, statusMessageId, `⚠️ Video could not be sent directly. Here is the download link:\n\n${proxyUrl}`);
         }
 
     } catch (error: any) {
@@ -691,7 +708,7 @@ async function handleAnimeEpisodeDownload(chatId: string, episodeId: string) {
     }
 }
 
-async function processCallbackQuery(callbackQuery: any) {
+async function processCallbackQuery(callbackQuery: any, request: Request) {
     const chatId = callbackQuery.message.chat.id.toString();
     const state = getUserState(chatId);
     const data = callbackQuery.data;
@@ -751,20 +768,12 @@ async function processCallbackQuery(callbackQuery: any) {
         
         await answerCallbackQuery(callbackQuery.id, "Preparing to send all selected episodes...");
         
-        const [,,startStr, endStr] = data.split('_');
-        const start = parseInt(startStr);
-        const end = parseInt(endStr);
-        
-        const allAvailableEpisodes = state.animeInfo.episodes.filter(ep => 
-            state.selectedSubOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
-        ).sort((a,b) => a.number - b.number) || [];
+        const episodeIds = data.substring('anime_ep_all_'.length).split('&');
 
-        const episodesToDownload = allAvailableEpisodes.slice(start, end);
+        await sendMessage(chatId, `Found ${episodeIds.length} episodes. I will send them one by one.`);
 
-        await sendMessage(chatId, `Found ${episodesToDownload.length} episodes. I will send them one by one.`);
-
-        for(const ep of episodesToDownload) {
-            await handleAnimeEpisodeDownload(chatId, ep.id);
+        for(const epId of episodeIds) {
+            await handleAnimeEpisodeDownload(chatId, epId, request);
             // Add a small delay between messages to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -774,7 +783,7 @@ async function processCallbackQuery(callbackQuery: any) {
      if (data.startsWith('anime_ep_')) {
         if (state.step !== 'awaiting_episode_selection') return;
         const episodeId = data.substring('anime_ep_'.length);
-        await handleAnimeEpisodeDownload(chatId, episodeId);
+        await handleAnimeEpisodeDownload(chatId, episodeId, request);
         return;
     }
 
@@ -896,7 +905,7 @@ export async function POST(request: Request) {
             const incomingText = body.message.text;
             await processIncomingMessage(chatId, incomingText);
         } else if (body.callback_query) {
-             await processCallbackQuery(body.callback_query);
+             await processCallbackQuery(body.callback_query, request);
         } else {
              console.log("Update is not a standard text message or callback query, skipping.");
         }

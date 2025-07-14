@@ -19,18 +19,19 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Get the headers from the axios response
     const headers = new Headers();
     Object.entries(response.headers).forEach(([key, value]) => {
       // Filter out headers that might cause issues, like 'content-encoding'
-      if (key.toLowerCase() === 'content-encoding') return;
+      if (key.toLowerCase() === 'transfer-encoding' || key.toLowerCase() === 'connection' || key.toLowerCase() === 'content-encoding') {
+          return;
+      }
       if (typeof value === 'string') {
         headers.set(key, value);
       } else if (Array.isArray(value)) {
         headers.set(key, value.join(', '));
       }
     });
-
+    
     // Ensure the content-type is set correctly
     if (!headers.has('content-type')) {
         headers.set('content-type', response.headers['content-type'] || 'application/octet-stream');
