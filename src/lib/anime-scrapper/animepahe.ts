@@ -1,7 +1,6 @@
 
 import { load } from 'cheerio';
 import {
-  AnimeParser,
   ISearch,
   IAnimeInfo,
   MediaStatus,
@@ -11,6 +10,7 @@ import {
   IEpisodeServer,
   MediaFormat,
 } from './models';
+import AnimeParser from './anime-parser';
 import Kwik from './kwik';
 import { USER_AGENT } from './utils';
 import { getCookies } from './cookie-service';
