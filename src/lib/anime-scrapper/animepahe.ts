@@ -25,12 +25,28 @@ class AnimePahe extends AnimeParser {
   private Headers(sessionId: string | false = false) {
     let cookie = '';
     try {
-        // Construct the full path to the cookie file
         const cookiePath = path.join(process.cwd(), 'xiq1ww.txt');
-        // Read the cookie from the file
-        cookie = fs.readFileSync(cookiePath, 'utf-8').trim();
+        const cookieFile = fs.readFileSync(cookiePath, 'utf-8');
+
+        // Parse Netscape cookie file format
+        cookie = cookieFile
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#')) // ignore comments and empty lines
+            .map(line => {
+                const parts = line.split('\t');
+                if (parts.length >= 7) {
+                    const name = parts[5];
+                    const value = parts[6];
+                    return `${name}=${value}`;
+                }
+                return null;
+            })
+            .filter(Boolean) // remove nulls
+            .join('; ');
+
     } catch (err) {
-        console.warn('Could not read animepahe cookie file.', err);
+        console.warn('Could not read or parse animepahe cookie file.', err);
     }
     
     return {
