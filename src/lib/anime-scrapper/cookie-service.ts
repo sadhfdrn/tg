@@ -9,12 +9,18 @@ const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
   const cookieApiUrl = process.env.COOKIE_API_URL;
   if (!cookieApiUrl) {
-    console.warn("COOKIE_API_URL is not set. Using fallback local file.");
     // Fallback to local file for testing if API is not set
-    const filePath = path.join(process.cwd(), 'src/lib/anime-scrapper/cookies.json');
+    const filePath = path.join(process.cwd(), 'r4gwb7.txt');
     try {
       const fileContent = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(fileContent);
+      const cookies: Record<string, string> = {};
+      const lines = fileContent.split('\n');
+      lines.forEach(line => {
+        if(line.startsWith('animepahe:')) cookies.animepahe = line.replace('animepahe:', '').trim();
+        if(line.startsWith('pahewin:')) cookies.pahewin = line.replace('pahewin:', '').trim();
+        if(line.startsWith('kwik:')) cookies.kwik = line.replace('kwik:', '').trim();
+      });
+      return cookies;
     } catch (error) {
       throw new Error("Local cookie file not found and COOKIE_API_URL is not set. Cannot proceed.");
     }
