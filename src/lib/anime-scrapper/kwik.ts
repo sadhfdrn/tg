@@ -2,6 +2,7 @@
 import { IVideo } from './models';
 import VideoExtractor from './video-extractor';
 import axios from 'axios';
+import { KWIK_COOKIE } from './utils';
 
 class Kwik extends VideoExtractor {
   protected override serverName = 'kwik';
@@ -16,9 +17,11 @@ class Kwik extends VideoExtractor {
 
   override extract = async (videoUrl: URL): Promise<IVideo[]> => {
     try {
-      // Use fetch API which is more environment-agnostic
       const response = await fetch(videoUrl.href, {
-        headers: { Referer: this.host },
+        headers: { 
+          Referer: this.host,
+          Cookie: KWIK_COOKIE,
+         },
       });
 
       if (!response.ok) {
@@ -27,7 +30,8 @@ class Kwik extends VideoExtractor {
 
       const data = await response.text();
       
-      const sourceMatch = data.match(/https.*?m3u8/);
+      const sourceMatch = data.match(/https?:\/\/[^"]*?\.m3u8[^"]*/);
+      
       if(!sourceMatch || !sourceMatch[0]) {
           console.warn("Could not extract M3U8 source from Kwik.");
           return [];

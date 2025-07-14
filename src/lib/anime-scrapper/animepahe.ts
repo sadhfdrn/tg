@@ -12,9 +12,7 @@ import {
 } from './models';
 import AnimeParser from './anime-parser';
 import Kwik from './kwik';
-import { USER_AGENT } from './utils';
-import fs from 'fs';
-import path from 'path';
+import { USER_AGENT, ANIMEPAHE_COOKIE } from './utils';
 
 class AnimePahe extends AnimeParser {
   override readonly name = 'AnimePahe';
@@ -23,45 +21,34 @@ class AnimePahe extends AnimeParser {
   protected override classPath = 'ANIME.AnimePahe';
 
   private Headers() {
-    // Reading the cookie from an environment variable is more robust
-    // than trying to parse a file that might change format.
-    const cookie = process.env.ANIMEPAHE_COOKIE || '';
-
-    if (!cookie) {
-        console.warn('ANIMEPAHE_COOKIE environment variable is not set. This may result in 403 errors.');
-    }
-
     return {
       'User-Agent': USER_AGENT,
-      'Referer': `${this.baseUrl}/`, // Set a consistent Referer
-      'Cookie': cookie,
+      'Referer': `${this.baseUrl}/`,
+      'Cookie': ANIMEPAHE_COOKIE,
     };
   }
 
   override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
       const { data } = await this.client.get(
-        `${this.baseUrl}/search?q=${encodeURIComponent(query)}`,
+        `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`,
         {
           headers: this.Headers(),
         }
       );
-      const $ = load(data);
-
       const res: ISearch<IAnimeResult> = {
         results: [],
       };
-
-      $('div.timeline-content > .timeline-item').each((i, el) => {
-        res.results.push({
-            id: $(el).find('a.timeline-poster').attr('href')?.split('/')[2]!,
-            title: $(el).find('div.timeline-body > h5 > a').text()?.trim()!,
-            image: $(el).find('a.timeline-poster > img').attr('src')!,
-            rating: parseFloat($(el).find('div.timeline-body > div > p > strong').text()?.trim()) || 0,
-            releaseDate: $(el).find('div.timeline-body > p:nth-child(2)').text()?.trim(),
-            type: $(el).find('div.timeline-body > div > p > a').text()?.trim() as MediaFormat,
-        });
-      });
+      if (data.data) {
+        res.results = data.data.map((item: any) => ({
+          id: item.session,
+          title: item.title,
+          image: item.poster,
+          rating: item.score,
+          releaseDate: item.year,
+          type: item.type as MediaFormat,
+        }));
+      }
 
       return res;
     } catch (err) {
@@ -148,11 +135,40 @@ class AnimePahe extends AnimeParser {
 
       const extractor = new Kwik();
       for (const link of links) {
-        const res = await extractor.extract(new URL(link.url));
-        if (res[0]) {
-          res[0].quality = link.quality;
-          iSource.sources.push(res[0]);
-        }
+          const pahewinUrl = new URL(link.url);
+          // Handle the pahe.win redirect page
+          const pahewinRes = await this.client.get(pahewinUrl.href, {
+              headers: {
+                  "Referer": this.baseUrl,
+              }
+          });
+          
+          const $$ = load(pahewinRes.data);
+          const form = $$('form');
+          const formaction = form.attr('action');
+          const formMethod = form.attr('method');
+          const token = form.find('input[name="_token"]').attr('value');
+          if(!formaction) {
+            throw new Error("Could not find form action on pahe.win")
+          }
+
+          const finalRedirect = await this.client({
+            method: formMethod as "GET" | "POST",
+            url: formaction,
+            headers: {
+                "Referer": pahewinUrl.href,
+                "Cookie": process.env.PAHEWIN_COOKIE,
+            },
+            data: new URLSearchParams({_token: token!})
+          });
+
+          const finalUrl = new URL(finalRedirect.request.res.responseUrl);
+
+          const res = await extractor.extract(finalUrl);
+          if (res[0]) {
+              res[0].quality = link.quality;
+              iSource.sources.push(res[0]);
+          }
       }
 
       return iSource;
