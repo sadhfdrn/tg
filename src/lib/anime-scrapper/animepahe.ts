@@ -170,6 +170,8 @@ class AnimePahe extends AnimeParser {
         },
         sources: [],
       };
+      
+      const cookies = await getCookies();
 
       for (const link of links) {
         // Here we handle the pahe.win redirect
@@ -177,7 +179,7 @@ class AnimePahe extends AnimeParser {
         const paheWinRes = await this.client.get(paheWinUrl.href, { 
             headers: { 
                 'Referer': `${this.baseUrl}/`,
-                'Cookie': (await getCookies()).pahewin
+                'Cookie': cookies.pahewin
             } 
         });
         const $$ = load(paheWinRes.data);
