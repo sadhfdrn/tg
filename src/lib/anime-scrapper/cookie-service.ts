@@ -13,24 +13,24 @@ async function fetchAndParseCookies(): Promise<Record<string, string>> {
     throw new Error('COOKIE_API_URL and COOKIE_API_KEY environment variables must be set.');
   }
 
+  const endpoint = `${cookieApiUrl}/api/get-cookies`;
+
   try {
-    const response = await axios.get(cookieApiUrl, {
+    const response = await axios.get(endpoint, {
       headers: {
         'x-api-key': cookieApiKey,
       },
       timeout: 15000, // 15-second timeout
     });
 
-    if (response.data?.success === true && response.data.cookies) {
+    if (response.data && typeof response.data === 'object' && response.data.animepahe) {
       console.log('Successfully fetched new cookies.');
-      return response.data.cookies;
+      return response.data;
     } else {
-      // Log the actual response for debugging
       console.error('Invalid response format from cookie service:', response.data);
       throw new Error(`Failed to fetch cookies from API: ${response.data?.error || 'Invalid response format'}`);
     }
   } catch (error: any) {
-    // Provide more detailed logs
     if (axios.isAxiosError(error)) {
         console.error('Axios error fetching cookies from API:', {
             message: error.message,
@@ -58,7 +58,6 @@ export async function getCookies(): Promise<{ animepahe: string; pahewin: string
   const { animepahe, pahewin, kwik } = cachedCookies;
 
   if (!animepahe || !pahewin || !kwik) {
-    // If cookies are missing, force a refresh on the next call
     cachedCookies = null; 
     throw new Error('One or more required cookies (animepahe, pahewin, kwik) are missing from the API response.');
   }
