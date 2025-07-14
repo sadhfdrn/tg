@@ -7,10 +7,10 @@ const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
   const cookieApiUrl = process.env.COOKIE_API_URL;
-  const cookieApiKey = process.env.COOKIE_API_KEY;
+  const cookieApiKey = process.env.API_KEY;
 
   if (!cookieApiUrl || !cookieApiKey) {
-    throw new Error('COOKIE_API_URL and COOKIE_API_KEY environment variables must be set.');
+    throw new Error('COOKIE_API_URL and API_KEY environment variables must be set.');
   }
 
   const endpoint = `${cookieApiUrl}/api/cookies`;
