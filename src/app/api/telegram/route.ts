@@ -4,7 +4,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/lib/anime-scrapper/actions';
-import { IAnimeResult, IAnimeInfo, SubOrSub } from '@/lib/anime-scrapper/models';
+import { IAnimeResult, IAnimeInfo, SubOrSub, IAnimeEpisode } from '@/lib/anime-scrapper/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -14,7 +14,7 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 type WatermarkPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
 interface UserState {
-    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete' | 'awaiting_anime_name' | 'awaiting_anime_selection' | 'awaiting_subdub_selection' | 'awaiting_episode_selection';
+    step: 'idle' | 'awaiting_main_menu_choice' | 'awaiting_url' | 'awaiting_download_option' | 'awaiting_preset_management_action' | 'awaiting_preset_name' | 'awaiting_preset_text' | 'awaiting_preset_style' | 'awaiting_preset_position' | 'awaiting_preset_to_delete' | 'awaiting_anime_name' | 'awaiting_anime_selection' | 'awaiting_subdub_selection' | 'awaiting_episode_group_selection' | 'awaiting_episode_selection';
     urlBuffer?: string;
     presetNameBuffer?: string;
     presetStyleBuffer?: string;
@@ -25,6 +25,7 @@ interface UserState {
     animeInfo?: IAnimeInfo;
     currentMessageId?: number;
     selectedSubOrDub?: SubOrSub;
+    episodePage: number;
 }
 
 const userStates: Record<string, UserState> = {};
@@ -38,10 +39,12 @@ const WATERMARK_POSITIONS: Record<string, WatermarkPosition> = {
     '↙️ Bottom Left': 'bottom-left',
     '↘️ Bottom Right': 'bottom-right',
 }
+const EPISODE_GROUP_SIZE = 50;
+
 
 function getUserState(chatId: string): UserState {
     if (!userStates[chatId]) {
-        userStates[chatId] = { step: 'idle', presets: {} };
+        userStates[chatId] = { step: 'idle', presets: {}, episodePage: 0 };
     }
     return userStates[chatId];
 }
@@ -273,17 +276,24 @@ function getAnimeNavigationKeyboard(currentIndex: number, totalResults: number) 
     }
 
     return {
-        inline_keyboard: [buttons]
+        inline_keyboard: [
+            buttons,
+            [{ text: '❌ Cancel', callback_data: 'anime_cancel_search'}]
+        ]
     };
 }
 
 
-function getSubDubKeyboard() {
+function getSubDubKeyboard(info: IAnimeInfo) {
+    const buttons = [];
+    if (info.hasSub) buttons.push({ text: 'Subbed', callback_data: 'anime_subdub_sub'});
+    if (info.hasDub) buttons.push({ text: 'Dubbed', callback_data: 'anime_subdub_dub'});
+
     return {
-        inline_keyboard: [[
-            { text: 'Subbed', callback_data: 'anime_subdub_sub'},
-            { text: 'Dubbed', callback_data: 'anime_subdub_dub'}
-        ]]
+        inline_keyboard: [
+            buttons,
+            [{ text: '🔙 Back to Search', callback_data: 'anime_back_to_search'}]
+        ]
     };
 }
 
@@ -299,7 +309,7 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
     const currentIndex = state.animeSearchIndex || 0;
     const anime = results[currentIndex];
     const title = typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji;
-    const caption = `*${title}*\n\n*Total Episodes:* ${anime.episodes || 'N/A'}\n\n*Description:* Not available for this provider.`;
+    const caption = `*${title}*\n\n*Episodes:* ${anime.episodes || 'N/A'}\n\n*Description:* Not available for this provider.`;
     const photoUrl = anime.image || 'https://via.placeholder.com/225x350.png?text=No+Image';
     const reply_markup = getAnimeNavigationKeyboard(currentIndex, results.length);
 
@@ -324,36 +334,129 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
     }
 }
 
+async function presentEpisodeGroups(chatId: string, state: UserState) {
+    if (!state.animeInfo || !state.selectedSubOrDub) {
+        await sendMessage(chatId, "Something went wrong, please start the anime search again.");
+        state.step = 'idle';
+        return;
+    }
+    const info = state.animeInfo;
+    const availableEpisodes = info.episodes?.filter(ep => 
+        state.selectedSubOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
+    ) || [];
+    
+    const title = typeof info.title === 'string' ? info.title : (info.title as any).english || (info.title as any).romaji;
+
+    if (availableEpisodes.length === 0) {
+        await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for the selected version.`, getSubDubKeyboard(info));
+        state.step = 'awaiting_subdub_selection';
+        return;
+    }
+
+    if (availableEpisodes.length <= EPISODE_GROUP_SIZE) {
+        // No grouping needed, go straight to episode selection
+        state.episodePage = 0;
+        await presentEpisodeSelection(chatId, state);
+        return;
+    }
+    
+    state.step = 'awaiting_episode_group_selection';
+
+    const groupButtons: {text: string, callback_data: string}[] = [];
+    for (let i = 0; i < availableEpisodes.length; i += EPISODE_GROUP_SIZE) {
+        const start = i + 1;
+        const end = Math.min(i + EPISODE_GROUP_SIZE, availableEpisodes.length);
+        groupButtons.push({ text: `Episodes ${start}-${end}`, callback_data: `anime_epgroup_${i}` });
+    }
+
+    const rows = [];
+    for (let i = 0; i < groupButtons.length; i += 2) {
+        rows.push(groupButtons.slice(i, i + 2));
+    }
+    
+    rows.push([{ text: '🔙 Back to Sub/Dub', callback_data: 'anime_back_to_subdub'}]);
+
+    const reply_markup = { inline_keyboard: rows };
+    await editMessage(chatId, state.currentMessageId!, `*${title}* has a lot of episodes! Please select a range to view.`, reply_markup);
+
+}
+
+async function presentEpisodeSelection(chatId: string, state: UserState) {
+    if (!state.animeInfo || !state.selectedSubOrDub) {
+        await sendMessage(chatId, "Something went wrong, please start the anime search again.");
+        state.step = 'idle';
+        return;
+    }
+    state.step = 'awaiting_episode_selection';
+    const info = state.animeInfo;
+    const title = typeof info.title === 'string' ? info.title : (info.title as any).english || (info.title as any).romaji;
+
+    const allAvailableEpisodes = info.episodes?.filter(ep => 
+        state.selectedSubOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
+    ).sort((a,b) => a.number - b.number) || [];
+
+    const start = state.episodePage * EPISODE_GROUP_SIZE;
+    const end = start + EPISODE_GROUP_SIZE;
+    const episodesToShow = allAvailableEpisodes.slice(start, end);
+
+    if (episodesToShow.length === 0) {
+        await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for this selection.`, getSubDubKeyboard(info));
+        state.step = 'awaiting_subdub_selection';
+        return;
+    }
+
+    const episodeButtons = episodesToShow.map(ep => ({ text: `Ep ${ep.number}`, callback_data: `anime_ep_${ep.id}` }));
+    
+    const rows = [];
+    for (let i = 0; i < episodeButtons.length; i += 4) { // 4 buttons per row
+        rows.push(episodeButtons.slice(i, i + 4));
+    }
+
+    rows.push([{ text: `All ${start+1}-${end}`, callback_data: `anime_ep_all_${start}` }]);
+    
+    const navButtons = [];
+    if (allAvailableEpisodes.length > EPISODE_GROUP_SIZE) {
+         navButtons.push({ text: '🔙 Back to Groups', callback_data: 'anime_back_to_epgroup' });
+    } else {
+        navButtons.push({ text: '🔙 Back to Sub/Dub', callback_data: 'anime_back_to_subdub' });
+    }
+    rows.push(navButtons);
+
+    const reply_markup = { inline_keyboard: rows };
+    const messageText = `*${title}*\nSelect episodes to download (${state.selectedSubOrDub}):`;
+
+    await editMessage(chatId, state.currentMessageId!, messageText, reply_markup);
+}
+
 
 async function processIncomingMessage(chatId: string, text: string) {
     const state = getUserState(chatId);
     const trimmedText = text.trim();
 
+    const resetState = async () => {
+        if (state.currentMessageId) {
+            try {
+                await deleteMessage(chatId, state.currentMessageId);
+            } catch (e) { console.error("Could not delete message during reset", e) }
+        }
+        userStates[chatId] = { step: 'idle', presets: state.presets, episodePage: 0 };
+        await sendMessage(chatId, "Action cancelled. Returning to the main menu.", getMainMenuKeyboard());
+    }
+
     // --- Universal Cancel / Back ---
     if (trimmedText === '❌ Cancel' || trimmedText === '🔙 Back to Main Menu') {
-        if (state.currentMessageId) await deleteMessage(chatId, state.currentMessageId);
-        state.step = 'idle';
-        state.urlBuffer = undefined;
-        state.presetNameBuffer = undefined;
-        state.presetStyleBuffer = undefined;
-        state.presetPositionBuffer = undefined;
-        state.animeSearchResults = undefined;
-        state.animeSearchIndex = undefined;
-        state.animeInfo = undefined;
-        state.currentMessageId = undefined;
-        state.selectedSubOrDub = undefined;
-        await sendMessage(chatId, "Action cancelled. Returning to the main menu.", getMainMenuKeyboard());
+        await resetState();
         return;
     }
 
     // --- State Machine ---
     switch(state.step) {
         case 'awaiting_anime_name':
-            const messageId = await sendMessage(chatId, `Searching for "${trimmedText}"...`);
+            const messageId = await sendMessage(chatId, `Searching for "${trimmedText}"...`, getCancelKeyboard());
             try {
                 const searchResults = await searchAnime(trimmedText);
                 if (searchResults.results.length === 0) {
-                    if (messageId) await editMessage(chatId, messageId, `No results found for "${trimmedText}". Please try another name.`);
+                    if (messageId) await editMessage(chatId, messageId, `No results found for "${trimmedText}". Please try another name or cancel.`);
                     return;
                 }
                 if (messageId) await deleteMessage(chatId, messageId);
@@ -370,7 +473,6 @@ async function processIncomingMessage(chatId: string, text: string) {
             return;
         
         case 'awaiting_episode_selection':
-            // Logic to handle user's episode choice will go here.
             if (trimmedText === '✅ Confirm Download') {
                 await sendMessage(chatId, "Alright! Starting download... (This part is not fully implemented yet).", getMainMenuKeyboard());
                 state.step = 'idle'; // Reset for next command
@@ -523,7 +625,7 @@ async function processIncomingMessage(chatId: string, text: string) {
     
     if (trimmedText === '/anime' || trimmedText === '😎 Anime') {
         state.step = 'awaiting_anime_name';
-        await sendMessage(chatId, "What anime are you looking for?");
+        await sendMessage(chatId, "What anime are you looking for?", getCancelKeyboard());
         return;
     }
 
@@ -543,100 +645,109 @@ async function processIncomingMessage(chatId: string, text: string) {
     }
 }
 
-async function presentEpisodeSelection(chatId: string, state: UserState) {
-    if (!state.animeInfo || !state.selectedSubOrDub) {
-        await sendMessage(chatId, "Something went wrong, please start the anime search again.");
-        state.step = 'idle';
-        return;
-    }
-    state.step = 'awaiting_episode_selection';
-    const info = state.animeInfo;
-    const title = typeof info.title === 'string' ? info.title : (info.title as any).english || (info.title as any).romaji;
-
-    // Filter episodes based on Sub/Dub selection
-    const availableEpisodes = info.episodes?.filter(ep => 
-        state.selectedSubOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
-    ) || [];
-
-    if (availableEpisodes.length === 0) {
-        await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for the selected version.`, getMainMenuKeyboard());
-        state.step = 'idle';
-        return;
-    }
-
-    const episodeButtons = availableEpisodes.map(ep => ({ text: `Episode ${ep.number}` }));
-    
-    const rows = [];
-    for (let i = 0; i < episodeButtons.length; i += 3) {
-        rows.push(episodeButtons.slice(i, i + 3));
-    }
-
-    rows.push([{ text: 'All Episodes' }]);
-    rows.push([{ text: '✅ Confirm Download' }, { text: '❌ Cancel' }]);
-
-    await editMessage(chatId, state.currentMessageId!, `Found *${availableEpisodes.length}* episodes for *${title}*. Please make your selection.`);
-    
-    await sendMessage(chatId, `Which *${state.selectedSubOrDub}* episodes would you like to download?`, {
-        keyboard: rows,
-        one_time_keyboard: true,
-        resize_keyboard: true,
-    });
-}
-
 async function processCallbackQuery(callbackQuery: any) {
     const chatId = callbackQuery.message.chat.id.toString();
     const state = getUserState(chatId);
     const data = callbackQuery.data;
+    const messageId = callbackQuery.message.message_id;
 
     await answerCallbackQuery(callbackQuery.id);
 
+    const resetState = async () => {
+        if (state.currentMessageId) await deleteMessage(chatId, state.currentMessageId);
+        userStates[chatId] = { step: 'idle', presets: state.presets, episodePage: 0 };
+        await sendMessage(chatId, "Action cancelled. Returning to the main menu.", getMainMenuKeyboard());
+    }
+
+    if(data === 'anime_cancel_search') {
+        await resetState();
+        return;
+    }
+
+    if(data === 'anime_back_to_search'){
+        state.step = 'awaiting_anime_selection';
+        await sendOrEditAnimeMessage(chatId, state);
+        return;
+    }
+
+    if(data === 'anime_back_to_subdub'){
+        if (!state.animeInfo) return;
+        state.step = 'awaiting_subdub_selection';
+        const title = typeof state.animeInfo.title === 'string' ? state.animeInfo.title : (state.animeInfo.title as any).english || (state.animeInfo.title as any).romaji;
+        await editMessage(chatId, messageId, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(state.animeInfo));
+        return;
+    }
+
+    if (data === 'anime_back_to_epgroup') {
+        await presentEpisodeGroups(chatId, state);
+        return;
+    }
+    
+
     if (data.startsWith('anime_subdub_')) {
         if(state.step !== 'awaiting_subdub_selection') return;
-
         state.selectedSubOrDub = data.split('_').pop() as SubOrSub;
+        if(state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching episodes for ${state.selectedSubOrDub}...`);
+        await presentEpisodeGroups(chatId, state);
+        return;
+    }
+
+    if (data.startsWith('anime_epgroup_')) {
+        if (state.step !== 'awaiting_episode_group_selection') return;
+        state.episodePage = parseInt(data.split('_').pop() || '0') / EPISODE_GROUP_SIZE;
         await presentEpisodeSelection(chatId, state);
         return;
     }
 
-    if (state.step !== 'awaiting_anime_selection') return;
+     if (data.startsWith('anime_ep_')) {
+        if (state.step !== 'awaiting_episode_selection') return;
+        // This is a placeholder for handling individual episode selection logic.
+        // For now, it will just show an alert.
+        const episodeId = data.substring('anime_ep_'.length);
+        await answerCallbackQuery(callbackQuery.id, `Selected Episode ID: ${episodeId}. Download logic not implemented.`);
+        return;
+    }
 
-    if (data === 'anime_next' || data === 'anime_prev') {
-        if (data === 'anime_next') {
-            state.animeSearchIndex = (state.animeSearchIndex ?? 0) + 1;
-        } else {
-            state.animeSearchIndex = (state.animeSearchIndex ?? 0) - 1;
-        }
-        await sendOrEditAnimeMessage(chatId, state);
-    } else if (data === 'anime_select') {
-        const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
-        
-        const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : (selectedAnime.title as any).english || (selectedAnime.title as any).romaji;
-        if (state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
-        else state.currentMessageId = await sendMessage(chatId, `Fetching details for *${title}*...`);
-        
-        try {
-            const info = await getAnimeInfo(selectedAnime.id);
-            state.animeInfo = info;
-
-            const hasSub = info.episodes?.some(ep => ep.isSubbed);
-            const hasDub = info.episodes?.some(ep => ep.isDubbed);
-
-            if (hasSub && hasDub) {
-                state.step = 'awaiting_subdub_selection';
-                await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard());
-            } else if (hasSub) {
-                state.selectedSubOrDub = SubOrSub.SUB;
-                await presentEpisodeSelection(chatId, state);
-            } else if (hasDub) {
-                state.selectedSubOrDub = SubOrSub.DUB;
-                await presentEpisodeSelection(chatId, state);
+    if (state.step === 'awaiting_anime_selection') {
+        if (data === 'anime_next' || data === 'anime_prev') {
+            if (data === 'anime_next') {
+                state.animeSearchIndex = (state.animeSearchIndex ?? 0) + 1;
             } else {
-                await editMessage(chatId, state.currentMessageId!, `Sorry, no watchable episodes found for *${title}*.`);
-                state.step = 'idle';
+                state.animeSearchIndex = (state.animeSearchIndex ?? 0) - 1;
             }
-        } catch (error) {
-            console.error(error);
-            if(state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Could not fetch details for *${title}*.`);
+            await sendOrEditAnimeMessage(chatId, state);
+        } else if (data === 'anime_select') {
+            const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
+            
+            const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : (selectedAnime.title as any).english || (selectedAnime.title as any).romaji;
+            if (state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
+            else state.currentMessageId = await sendMessage(chatId, `Fetching details for *${title}*...`);
+            
+            try {
+                const info = await getAnimeInfo(selectedAnime.id);
+                state.animeInfo = info;
+                state.step = 'awaiting_subdub_selection';
+
+                if (!info.hasSub && !info.hasDub) {
+                    await editMessage(chatId, state.currentMessageId, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
+                    state.step = 'awaiting_anime_selection';
+                    return;
+                }
+
+                if (info.hasSub && !info.hasDub) {
+                    state.selectedSubOrDub = SubOrSub.SUB;
+                    await presentEpisodeGroups(chatId, state);
+                } else if (!info.hasSub && info.hasDub) {
+                    state.selectedSubOrDub = SubOrSub.DUB;
+                    await presentEpisodeGroups(chatId, state);
+                } else {
+                    await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(info));
+                }
+                
+            } catch (error) {
+                console.error(error);
+                if(state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Could not fetch details for *${title}*.`);
+            }
         }
     }
 }
