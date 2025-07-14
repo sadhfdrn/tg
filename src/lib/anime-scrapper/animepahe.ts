@@ -140,7 +140,7 @@ class AnimePahe extends AnimeParser {
   private Headers(sessionId?: string | false) {
     return {
       'User-Agent': USER_AGENT,
-      'Referer': sessionId ? `${this.baseUrl}/anime/${sessionId}` : `${this.baseUrl}`,
+      'Referer': sessionId ? `${this.baseUrl}/anime/${sessionId}` : this.baseUrl,
       'Cookie': 'cf_clearance=Q7BsjH27Ke2v_3zGgw4ZcaxpDXtTbUPpBqWj.BSJdlo-1725301880-1.0.1.1-p4CqgW55lQvjYfFjcgx2QaqWd40pMf9y9z51S9u8W01dJv2B.7k1qj39V.mK4P22qN12p4gM2.2g.4; __ddg2=;'
     };
   }
