@@ -66,33 +66,35 @@ export async function GET(request: NextRequest) {
       }
     ];
 
-    let response;
-    let lastError;
+    let response: Response | undefined;
+    let lastError: any;
 
     for (let i = 0; i < attempts.length; i++) {
       try {
         console.log(`Attempt ${i + 1} with different headers and IP: ${simulatedIP}`);
         response = await fetch(url, {
-          headers: attempts[i],
-          signal: AbortSignal.timeout(30000),
+          headers: attempts[i] as HeadersInit,
+          signal: AbortSignal.timeout(30000), // 30-second timeout
         });
 
         if (response.ok) {
           console.log(`Success on attempt ${i + 1}`);
           break;
         } else {
-          console.log(`Attempt ${i + 1} failed: ${response.status}`);
+          console.log(`Attempt ${i + 1} failed with status: ${response.status}`);
           lastError = response;
+          response = undefined; // Ensure we don't use a failed response
         }
       } catch (error) {
-        console.log(`Attempt ${i + 1} threw error:`, error);
+        console.log(`Attempt ${i + 1} threw an error:`, error);
         lastError = error;
       }
     }
 
     if (!response || !response.ok) {
-      console.error(`All attempts failed. Last error: ${lastError instanceof Response ? lastError.status + ' ' + lastError.statusText : lastError}`);
-      return new NextResponse(`Failed to fetch video after multiple attempts: ${lastError instanceof Response ? lastError.status + ' ' + lastError.statusText : 'Network error'}`, { 
+      const statusText = lastError instanceof Response ? `${lastError.status} ${lastError.statusText}` : 'Network error';
+      console.error(`All proxy attempts failed. Last error: ${statusText}`);
+      return new NextResponse(`Failed to fetch video after multiple attempts: ${statusText}`, { 
         status: lastError instanceof Response ? lastError.status : 502
       });
     }
@@ -102,9 +104,6 @@ export async function GET(request: NextRequest) {
     if (contentType && !contentType.includes('video') && !contentType.includes('octet-stream')) {
       console.warn(`Unexpected content type: ${contentType}`);
     }
-
-    // Get content length for better download handling
-    const contentLength = response.headers.get('content-length');
     
     // Create response headers
     const responseHeaders = new Headers();
@@ -120,7 +119,7 @@ export async function GET(request: NextRequest) {
     ];
     
     headersToKeep.forEach(header => {
-      const value = response.headers.get(header);
+      const value = response!.headers.get(header);
       if (value) {
         responseHeaders.set(header, value);
       }
@@ -138,27 +137,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Stream the response to handle large files
-    const stream = new ReadableStream({
-      start(controller) {
-        const reader = response.body?.getReader();
-        
-        function pump(): Promise<void> {
-          return reader!.read().then(({ done, value }) => {
-            if (done) {
-              controller.close();
-              return;
-            }
-            controller.enqueue(value);
-            return pump();
-          });
-        }
-        
-        return pump();
-      },
-      cancel() {
-        response.body?.cancel();
-      }
-    });
+    const stream = response.body;
 
     return new NextResponse(stream, {
       status: response.status,
