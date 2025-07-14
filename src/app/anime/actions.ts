@@ -27,9 +27,9 @@ export async function searchAnime(query: string, provider: AnimeProvider): Promi
     const res = await activeProvider.search(query);
     const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
     return { ...res, results: validResults };
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    throw new Error('Failed to search for anime.');
+    throw new Error(err.message || 'Failed to search for anime.');
   }
 }
 
@@ -38,9 +38,9 @@ export async function getAnimeInfo(id: string, provider: AnimeProvider): Promise
     const activeProvider = getProvider(provider);
     const res = await activeProvider.fetchAnimeInfo(id);
     return res;
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    throw new Error('Failed to get anime info.');
+    throw new Error(err.message || 'Failed to get anime info.');
   }
 }
 
@@ -49,8 +49,8 @@ export async function getEpisodeSources(episodeId: string, provider: AnimeProvid
     const activeProvider = getProvider(provider);
     const res = await activeProvider.fetchEpisodeSources(episodeId);
     return res;
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    throw new Error('Failed to get episode sources.');
+    throw new Error(err.message || 'Failed to get episode sources.');
   }
 }
