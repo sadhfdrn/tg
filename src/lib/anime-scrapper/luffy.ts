@@ -1,3 +1,4 @@
+
 import { IVideo } from './models';
 import VideoExtractor from './video-extractor';
 import vm from 'node:vm';
@@ -17,6 +18,9 @@ class Luffy extends VideoExtractor {
         `${this.host}/players/${videoUrl.href!.split('/').pop()}.v2.js`
       );
       const c = await this.deobfuscateScript(script);
+      if (!c) {
+        throw new Error('Deobfuscation failed, returned null.');
+      }
       const jwt = jwtRegex.exec(c!)![0];
       server['luffy']?.map((item: any) => {
         this.sources.push({

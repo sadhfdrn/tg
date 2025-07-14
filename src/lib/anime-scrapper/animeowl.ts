@@ -1,3 +1,4 @@
+
 import { CheerioAPI, load } from 'cheerio';
 import {
   ISearch,
@@ -162,6 +163,8 @@ class AnimeOwl extends AnimeParser {
           ?.trim() ?? '0'
       );
       info.totalEpisodes = totalSubEpisodes > totalDubEpisodes ? totalSubEpisodes : totalDubEpisodes;
+      if (isNaN(info.totalEpisodes)) info.totalEpisodes = 0;
+      
       info.episodes = [];
 
       const subEpisodes = this.parseEpisodes($, '#anime-cover-sub-content .episode-node', SubOrSub.SUB);
@@ -190,7 +193,7 @@ class AnimeOwl extends AnimeParser {
             id: `${id.split('$')[0]}$${dub.id!}`,
             title: dub.title!,
             number: dub.number!,
-            url: dub.url,
+            url: sub.url,
             isSubbed: false,
             isDubbed: true,
           });

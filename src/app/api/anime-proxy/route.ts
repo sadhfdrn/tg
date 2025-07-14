@@ -20,23 +20,14 @@ export async function GET(request: NextRequest) {
     });
 
     const headers = new Headers();
-    Object.entries(response.headers).forEach(([key, value]) => {
-      // Filter out headers that might cause issues, like 'content-encoding'
-      if (key.toLowerCase() === 'transfer-encoding' || key.toLowerCase() === 'connection' || key.toLowerCase() === 'content-encoding') {
-          return;
-      }
-      if (typeof value === 'string') {
-        headers.set(key, value);
-      } else if (Array.isArray(value)) {
-        headers.set(key, value.join(', '));
-      }
-    });
-    
-    // Ensure the content-type is set correctly
-    if (!headers.has('content-type')) {
-        headers.set('content-type', response.headers['content-type'] || 'application/octet-stream');
+    // Only forward necessary headers
+    if(response.headers['content-type']) {
+      headers.set('content-type', response.headers['content-type']);
     }
-
+    if(response.headers['content-length']) {
+      headers.set('content-length', response.headers['content-length']);
+    }
+    
     // Stream the response back to the client
     return new NextResponse(response.data, {
       status: response.status,
@@ -47,9 +38,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Proxy error:', error);
     if (axios.isAxiosError(error) && error.response) {
+      // Forward the error response from the target server
+      const errorHeaders = new Headers(error.response.headers as any);
       return new NextResponse(error.response.data, {
         status: error.response.status,
         statusText: error.response.statusText,
+        headers: errorHeaders
       });
     }
     return new NextResponse('Error fetching the content', { status: 500 });

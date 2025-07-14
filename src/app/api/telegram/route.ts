@@ -5,9 +5,12 @@ import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
 import { getAnimeInfo, getEpisodeSources, searchAnime } from '@/lib/anime-scrapper/actions';
 import { IAnimeResult, IAnimeInfo, SubOrSub, IAnimeEpisode } from '@/lib/anime-scrapper/models';
+import { summarizeText } from '@/ai/flows/summarize-flow';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const TELEGRAM_CAPTION_LIMIT = 1024;
+
 
 // We will store user states in memory for this example.
 // In a production app, this would be in a database.
@@ -329,7 +332,18 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
     let caption = `*${title}*\n\n`;
     if (animeInfo) {
         caption += `*Episodes:* ${animeInfo.totalEpisodes || 'N/A'}\n\n`;
-        caption += `*Description:* ${animeInfo.description || 'Not available.'}`;
+        let description = animeInfo.description || 'Not available.';
+        if (description.length > TELEGRAM_CAPTION_LIMIT - 100) { // Keep some buffer
+            try {
+                description = await summarizeText(description);
+                caption += `*Summary:* ${description}`;
+            } catch (summaryError) {
+                console.error("Failed to summarize description:", summaryError);
+                caption += `*Description:* ${description.substring(0, TELEGRAM_CAPTION_LIMIT - 150)}...`;
+            }
+        } else {
+             caption += `*Description:* ${description}`;
+        }
     } else if (infoError) {
         caption += `Could not fetch full details for this anime.`;
     } else {
