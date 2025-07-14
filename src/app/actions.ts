@@ -43,7 +43,7 @@ export async function handleMessage(
     onProgress?: (progress: { message: string, percentage?: number }) => Promise<void>
   ): Promise<{
   text?: string;
-  media?: { type: 'video' | 'image', url: string, caption: string }[]
+  media?: { type: 'video' | 'image', url: string, path: string, caption: string }[]
 }> {
   const parts = message.trim().split(' ');
   const cmd = parts[0].toLowerCase();
@@ -65,19 +65,14 @@ export async function handleMessage(
       if (processedMedia.length === 0) {
         return { text: 'Could not process the TikTok video. It might be private, deleted, or the URL is invalid.' };
       }
-
-      const mediaForClient = processedMedia.map(item => {
-        const fileBuffer = fs.readFileSync(item.path);
-        const base64Data = fileBuffer.toString('base64');
-        const mimeType = item.type === 'video' ? 'video/mp4' : 'image/jpeg';
-        return {
-          ...item,
-          url: `data:${mimeType};base64,${base64Data}`,
-        };
-      });
-
-      // Since we are sending base64, we can clean up immediately
-      cleanupFiles(processedMedia);
+      
+      const mediaForClient = processedMedia.map(item => ({
+        ...item,
+        // The URL for the Test page is still base64, but the path for Telegram is what's important
+        url: `data:${item.type === 'video' ? 'video/mp4' : 'image/jpeg'};base64,${fs.readFileSync(item.path).toString('base64')}`,
+      }));
+      
+      // Do not clean up files here, they will be cleaned up in the Telegram route after sending.
 
       return { media: mediaForClient, text: `Processed ${processedMedia.length} media file(s).` };
     } catch (error: any) {

@@ -24,6 +24,7 @@ import { handleMessage } from "../actions";
 type Media = {
   type: 'image' | 'video';
   url: string;
+  path: string;
   caption: string;
 };
 

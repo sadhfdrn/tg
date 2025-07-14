@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import FormData from 'form-data';
+import * as fs from 'fs';
 import { handleMessage } from '@/app/actions';
 import { getAnimeInfo, getEpisodeSources, searchAnime } from '@/lib/anime-scrapper/actions';
 import { IAnimeResult, IAnimeInfo, SubOrSub, IAnimeEpisode } from '@/lib/anime-scrapper/models';
@@ -884,13 +885,17 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
         await sendMessage(chatId, 'Could not start the process. Please try again.', getMainMenuKeyboard());
         return;
     }
-
+    
+    let lastMessage = '';
     const onProgress = async (progress: { message: string, percentage?: number }) => {
         let text = `⏳ ${progress.message}`;
         if (progress.percentage !== undefined) {
             text += ` ${progress.percentage.toFixed(0)}%`;
         }
-        await editMessage(chatId, statusMessageId, text);
+        if (text !== lastMessage) {
+            await editMessage(chatId, statusMessageId, text);
+            lastMessage = text;
+        }
     };
 
     let command = '/tiktok';
@@ -912,11 +917,23 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
             await editMessage(chatId, statusMessageId, `✅ Found ${response.media.length} media file(s). Sending now...`);
 
             for (const item of response.media) {
-                 if (item.type === 'video') {
-                    await axios.post(`${TELEGRAM_API_URL}/sendVideo`, { chat_id: String(chatId), video: item.url, caption: item.caption });
-                } else {
-                    await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, { chat_id: String(chatId), photo: item.url, caption: item.caption });
-                }
+                 const mediaBuffer = fs.readFileSync(item.path);
+                 const form = new FormData();
+                 form.append('chat_id', String(chatId));
+                 form.append('caption', item.caption);
+
+                 const endpoint = item.type === 'video' ? 'sendVideo' : 'sendPhoto';
+                 form.append(item.type, mediaBuffer, {
+                     filename: `media.${item.type === 'video' ? 'mp4' : 'jpg'}`,
+                     contentType: item.type === 'video' ? 'video/mp4' : 'image/jpeg',
+                 });
+                 
+                 await axios.post(`${TELEGRAM_API_URL}/${endpoint}`, form, {
+                     headers: form.getHeaders(),
+                 });
+
+                 // Clean up the temp file after sending
+                 if (fs.existsSync(item.path)) fs.unlinkSync(item.path);
             }
              await deleteMessage(chatId, statusMessageId);
         }
