@@ -16,14 +16,19 @@ class Kwik extends VideoExtractor {
 
   override extract = async (videoUrl: URL): Promise<IVideo[]> => {
     try {
-      const response = await fetch(`${videoUrl.href}`, {
+      // Use fetch API which is more environment-agnostic
+      const response = await fetch(videoUrl.href, {
         headers: { Referer: this.host },
       });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch Kwik URL: ${response.status} ${response.statusText}`);
+      }
 
       const data = await response.text();
       
       const sourceMatch = data.match(/https.*?m3u8/);
-      if(!sourceMatch) {
+      if(!sourceMatch || !sourceMatch[0]) {
           console.warn("Could not extract M3U8 source from Kwik.");
           return [];
       }

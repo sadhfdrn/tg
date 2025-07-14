@@ -29,7 +29,7 @@ export async function searchAnime(query: string, provider: AnimeProvider): Promi
     return { ...res, results: validResults };
   } catch (err: any) {
     console.error(err);
-    throw new Error(err.message || 'Failed to search for anime.');
+    throw new Error(err.message || `Failed to search for anime on ${provider}.`);
   }
 }
 
@@ -40,7 +40,7 @@ export async function getAnimeInfo(id: string, provider: AnimeProvider): Promise
     return res;
   } catch (err: any) {
     console.error(err);
-    throw new Error(err.message || 'Failed to get anime info.');
+    throw new Error(err.message || `Failed to get anime info from ${provider}.`);
   }
 }
 
@@ -51,6 +51,6 @@ export async function getEpisodeSources(episodeId: string, provider: AnimeProvid
     return res;
   } catch (err: any) {
     console.error(err);
-    throw new Error(err.message || 'Failed to get episode sources.');
+    throw new Error(err.message || `Failed to get episode sources from ${provider}.`);
   }
 }

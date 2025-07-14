@@ -13,6 +13,7 @@ import {
 import AnimeParser from './anime-parser';
 import Kwik from './kwik';
 import { USER_AGENT } from './utils';
+import { AxiosRequestConfig } from 'axios';
 
 class AnimePahe extends AnimeParser {
   override readonly name = 'AnimePahe';
@@ -22,26 +23,20 @@ class AnimePahe extends AnimeParser {
 
   override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
-      const { data } = await this.client.get(`${this.baseUrl}/search?q=${encodeURIComponent(query)}`, {
-        headers: this.Headers(),
-      });
-
-      const $ = load(data);
+      const { data } = await this.client.get(
+        `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`
+      );
 
       const res: ISearch<IAnimeResult> = {
-        results: [],
+        results: data.data.map((item: any) => ({
+          id: item.session,
+          title: item.title,
+          image: item.poster,
+          rating: item.score,
+          releaseDate: item.year,
+          type: item.type as MediaFormat,
+        })),
       };
-
-      $('div.search-results > .item-container > .item-box').each((i, el) => {
-        const id = $(el).find('a.item-cover').attr('href')?.split('/').pop() ?? '';
-        res.results.push({
-          id: id,
-          title: $(el).find('a.item-title').text().trim(),
-          image: $(el).find('a.item-cover > img').attr('src'),
-          releaseDate: $(el).find('p.item-meta > span:nth-child(1)').text().trim(),
-          type: $(el).find('p.item-meta > span:nth-child(2)').text().trim() as MediaFormat,
-        });
-      });
 
       return res;
     } catch (err) {
@@ -56,7 +51,9 @@ class AnimePahe extends AnimeParser {
     };
 
     try {
-      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, { headers: this.Headers(id) });
+      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, {
+        headers: { Referer: this.baseUrl },
+      });
       const $ = load(res.data);
 
       animeInfo.title = $('div.title-wrapper > h1 > span').first().text();
@@ -77,15 +74,19 @@ class AnimePahe extends AnimeParser {
         default:
           animeInfo.status = MediaStatus.UNKNOWN;
       }
-      animeInfo.type = $('div.anime-info > p:contains("Type:") > a').text().trim().toUpperCase() as MediaFormat;
-      
-      const { data } = await this.client.get(`${this.baseUrl}/api?m=release&id=${id}&sort=episode_asc&page=1`, {
-        headers: this.Headers(id),
-      });
+      animeInfo.type = $('div.anime-info > p:contains("Type:") > a')
+        .text()
+        .trim()
+        .toUpperCase() as MediaFormat;
+
+      const { data } = await this.client.get(
+        `${this.baseUrl}/api?m=release&id=${id}&sort=episode_asc&page=1`,
+        { headers: { Referer: `${this.baseUrl}/anime/${id}` } }
+      );
 
       animeInfo.totalEpisodes = data.total;
       animeInfo.episodes = data.data.map(
-        (item: any) => ({
+        (item: any): IAnimeEpisode => ({
           id: `${id}/${item.session}`,
           number: item.episode,
           title: item.title,
@@ -94,7 +95,7 @@ class AnimePahe extends AnimeParser {
           url: `${this.baseUrl}/play/${id}/${item.session}`,
         })
       );
-      
+
       return animeInfo;
     } catch (err) {
       throw new Error((err as Error).message);
@@ -103,27 +104,31 @@ class AnimePahe extends AnimeParser {
 
   override fetchEpisodeSources = async (episodeId: string): Promise<ISource> => {
     try {
-      const { data } = await this.client.get(`${this.baseUrl}/play/${episodeId}`);
+      const { data } = await this.client.get(`${this.baseUrl}/play/${episodeId}`, {
+        headers: { Referer: this.baseUrl },
+      });
 
       const $ = load(data);
 
-      const links = $('div#resolutionMenu > button').map((i, el) => ({
-        url: $(el).attr('data-src')!,
-        quality: $(el).text(),
-        audio: $(el).attr('data-audio'),
-      })).get();
+      const links = $('div#resolutionMenu > button')
+        .map((i, el) => ({
+          url: $(el).attr('data-src')!,
+          quality: $(el).text(),
+          audio: $(el).attr('data-audio'),
+        }))
+        .get();
 
       const iSource: ISource = {
         headers: { Referer: 'https://kwik.cx/' },
         sources: [],
       };
-      
+
       const extractor = new Kwik();
       for (const link of links) {
         const res = await extractor.extract(new URL(link.url));
-        if(res[0]) {
-            res[0].quality = link.quality;
-            iSource.sources.push(res[0]);
+        if (res[0]) {
+          res[0].quality = link.quality;
+          iSource.sources.push(res[0]);
         }
       }
 
@@ -136,14 +141,6 @@ class AnimePahe extends AnimeParser {
   override fetchEpisodeServers = (episodeLink: string): Promise<IEpisodeServer[]> => {
     throw new Error('Method not implemented.');
   };
-  
-  private Headers(sessionId?: string | false) {
-    return {
-      'User-Agent': USER_AGENT,
-      'Referer': sessionId ? `${this.baseUrl}/anime/${sessionId}` : this.baseUrl,
-      'Cookie': 'cf_clearance=Q7BsjH27Ke2v_3zGgw4ZcaxpDXtTbUPpBqWj.BSJdlo-1725301880-1.0.1.1-p4CqgW55lQvjYfFjcgx2QaqWd40pMf9y9z51S9u8W01dJv2B.7k1qj39V.mK4P22qN12p4gM2.2g.4; __ddg2=;'
-    };
-  }
 }
 
 export default AnimePahe;
