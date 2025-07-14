@@ -1,3 +1,4 @@
+
 'use client';
 import { useState } from 'react';
 import Image from 'next/image';
@@ -30,6 +31,13 @@ export default function AnimePage() {
     try {
       const results = await searchAnime(query);
       setSearchResults(results);
+      if (results.results) {
+        results.results.forEach((anime, index) => {
+          if (!anime.info) {
+            handleFetchInfo(anime.id, index);
+          }
+        });
+      }
     } catch (error) {
       console.error(error);
       toast({ title: 'Error', description: 'Failed to search for anime.', variant: 'destructive' });
@@ -45,7 +53,7 @@ export default function AnimePage() {
       setSearchResults(prev => {
         if (!prev) return null;
         const newResults = [...prev.results];
-        newResults[index].info = info;
+        newResults[index] = { ...newResults[index], info };
         return { ...prev, results: newResults };
       });
     } catch (error) {
@@ -73,7 +81,8 @@ export default function AnimePage() {
       const response = await fetch(proxyUrl);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch video: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch video: ${response.statusText} - ${errorText}`);
       }
 
       // Create a blob from the response
@@ -133,7 +142,6 @@ export default function AnimePage() {
                     <AccordionItem value={anime.id}>
                       <AccordionTrigger
                         className="p-4 hover:no-underline"
-                        onClick={() => !anime.info && handleFetchInfo(anime.id, index)}
                       >
                         <div className="flex gap-4 items-center w-full">
                           <Image
@@ -174,7 +182,7 @@ export default function AnimePage() {
                             </ScrollArea>
                           </>
                         ) : (
-                          <p>Click to load details...</p>
+                          <p>Loading details...</p>
                         )}
                       </AccordionContent>
                     </AccordionItem>
