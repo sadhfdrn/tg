@@ -13,8 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { searchAnime, getAnimeInfo, getEpisodeSources } from './actions';
 import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
+type ImageQuality = 'low' | 'medium' | 'high';
 
 export default function AnimePage() {
   const { toast } = useToast();
@@ -23,6 +25,7 @@ export default function AnimePage() {
   const [loading, setLoading] = useState(false);
   const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
   const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
+  const [imageQuality, setImageQuality] = useState<ImageQuality>('medium');
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -99,6 +102,15 @@ export default function AnimePage() {
     }
   };
 
+  const getImageSize = () => {
+    switch (imageQuality) {
+      case 'low': return { width: 50, height: 75 };
+      case 'medium': return { width: 75, height: 112 };
+      case 'high': return { width: 100, height: 150 };
+      default: return { width: 75, height: 112 };
+    }
+  };
+
   return (
     <div className="flex justify-center items-start min-h-screen bg-muted/40 p-4">
       <Card className="w-full max-w-4xl">
@@ -115,6 +127,16 @@ export default function AnimePage() {
               placeholder="Search for an anime..."
               className="flex-grow"
             />
+             <Select value={imageQuality} onValueChange={(value: ImageQuality) => setImageQuality(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Image Quality" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low Quality</SelectItem>
+                <SelectItem value="medium">Medium Quality</SelectItem>
+                <SelectItem value="high">High Quality</SelectItem>
+              </SelectContent>
+            </Select>
             <Button onClick={handleSearch} disabled={loading}>
               {loading ? <Loader className="animate-spin" /> : <Search />}
             </Button>
@@ -133,8 +155,8 @@ export default function AnimePage() {
                           <Image
                             src={anime.image || 'https://placehold.co/100x150.png'}
                             alt={typeof anime.title === 'string' ? anime.title : (anime.title as any).english || ''}
-                            width={75}
-                            height={112}
+                            width={getImageSize().width}
+                            height={getImageSize().height}
                             className="rounded-md object-cover"
                           />
                           <div className="text-left flex-grow">

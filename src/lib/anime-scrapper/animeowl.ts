@@ -193,7 +193,7 @@ class AnimeOwl extends AnimeParser {
             id: `${id.split('$')[0]}$${dub.id!}`,
             title: dub.title!,
             number: dub.number!,
-            url: sub.url,
+            url: dub.url,
             isSubbed: false,
             isDubbed: true,
           });
@@ -249,31 +249,39 @@ class AnimeOwl extends AnimeParser {
     episodeId: string,
     subOrDub: SubOrSub = SubOrSub.SUB
   ): Promise<IEpisodeServer[]> => {
-    const subEpisodeId = episodeId.split('$')[1].split('&')[0];
-    const dubEpisodeId = episodeId.split('&')[1];
+    const justTheId = episodeId.split('$')[1];
     const id = episodeId.split('$')[0];
     const { data } = await this.client.get(`${this.baseUrl}/anime/${id}`);
     const $ = load(data);
-    const subEpisode = this.parseEpisodes($, '#anime-cover-sub-content .episode-node', SubOrSub.SUB).filter(
-      item => item.id === subEpisodeId
-    );
-    const dubEpisode = this.parseEpisodes($, '#anime-cover-dub-content .episode-node', SubOrSub.DUB).filter(
-      item => item.id === dubEpisodeId
-    );
+  
+    const findEpisode = (selector: string, targetId: string) => {
+      const episodes = this.parseEpisodes($, selector, subOrDub);
+      return episodes.find(item => item.id?.endsWith(targetId));
+    };
+
+    let episode;
+    if (subOrDub === SubOrSub.SUB) {
+        const subId = justTheId.split('&')[0];
+        episode = findEpisode('#anime-cover-sub-content .episode-node', subId);
+    } else {
+        const dubId = justTheId.split('&')[1] ?? justTheId;
+        episode = findEpisode('#anime-cover-dub-content .episode-node', dubId);
+    }
+    
+    if (!episode?.url) {
+      throw new Error('Episode not found or URL is missing.');
+    }
 
     let directLink: string | undefined = '';
 
-    if (subOrDub === SubOrSub.SUB) {
-      const { data: intermediary } = await this.client.get(subEpisode[0].url!);
-      const $ = load(intermediary);
-      directLink = $('button#hot-anime-tab')?.attr('data-source');
+    const { data: intermediary } = await this.client.get(episode.url);
+    const $intermediary = load(intermediary);
+    directLink = $intermediary('button#hot-anime-tab')?.attr('data-source');
+  
+    if (!directLink) {
+        throw new Error('Could not find the direct link to the server.');
     }
-    if (subOrDub === SubOrSub.DUB) {
-      const { data: intermediary } = await this.client.get(dubEpisode[0].url!);
-      const $ = load(intermediary);
-      directLink = $('button#hot-anime-tab')?.attr('data-source');
-    }
-
+    
     const { data: server } = await this.client.get(`${this.baseUrl}${directLink}`);
     const servers: IEpisodeServer[] = [];
     server['luffy']?.map((item: any) => {
