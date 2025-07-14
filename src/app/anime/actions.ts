@@ -18,8 +18,8 @@ export async function searchAnime(query: string, provider: Provider = 'animeowl'
     const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
     return { ...res, results: validResults };
   } catch (err: any) {
-    console.error(err);
-    throw new Error(err.message || `Failed to search for anime on ${provider}.`);
+    console.error(`Error in searchAnime for provider ${provider}:`, err);
+    throw new Error(err.message || `Failed to search for anime on ${provider}. Check server logs for details.`);
   }
 }
 
@@ -28,8 +28,8 @@ export async function getAnimeInfo(id: string, provider: Provider = 'animeowl'):
     const res = await animeProviders[provider].fetchAnimeInfo(id);
     return res;
   } catch (err: any) {
-    console.error(err);
-    throw new Error(err.message || `Failed to get anime info from ${provider}.`);
+    console.error(`Error in getAnimeInfo for provider ${provider}:`, err);
+    throw new Error(err.message || `Failed to get anime info from ${provider}. Check server logs for details.`);
   }
 }
 
@@ -38,7 +38,7 @@ export async function getEpisodeSources(episodeId: string, provider: Provider = 
     const res = await animeProviders[provider].fetchEpisodeSources(episodeId);
     return res;
   } catch (err: any) {
-    console.error(err);
-    throw new Error(err.message || `Failed to get episode sources from ${provider}.`);
+    console.error(`Error in getEpisodeSources for provider ${provider}:`, err);
+    throw new Error(err.message || `Failed to get episode sources from ${provider}. Check server logs for details.`);
   }
 }
