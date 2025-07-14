@@ -56,28 +56,49 @@ export default function AnimePage() {
     }
   };
 
-  const handleDownload = async (episodeId: string) => {
+  const handleDownload = async (episodeId: string, episodeTitle: string) => {
     setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
     try {
       const sources = await getEpisodeSources(episodeId);
       const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
-      if (source?.url) {
-        const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
-        
-        const link = document.createElement('a');
-        link.href = proxyUrl;
-        link.setAttribute('download', `${episodeId}.mp4`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        toast({ title: 'Success', description: 'Download started.' });
-      } else {
+      
+      if (!source?.url) {
         throw new Error('No download source found.');
       }
+      
+      toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
+
+      // Fetch the video through the proxy
+      const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video: ${response.statusText}`);
+      }
+
+      // Create a blob from the response
+      const blob = await response.blob();
+      
+      // Create a temporary link to trigger the download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
+      link.setAttribute('download', cleanTitle);
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up the temporary link and blob URL
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: 'Success', description: 'Download started.' });
+
     } catch (error) {
       console.error(error);
-      toast({ title: 'Error', description: 'Failed to fetch download link.', variant: 'destructive' });
+      const errorMessage = (error instanceof Error) ? error.message : 'An unknown error occurred.';
+      toast({ title: 'Error', description: `Failed to start download: ${errorMessage}`, variant: 'destructive' });
     } finally {
       setSourceLoading(prev => ({ ...prev, [episodeId]: false }));
     }
@@ -144,7 +165,7 @@ export default function AnimePage() {
                                 {anime.info.episodes?.map(ep => (
                                   <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
                                     <span className="text-sm">{ep.title}</span>
-                                    <Button size="sm" onClick={() => handleDownload(ep.id)} disabled={sourceLoading[ep.id]}>
+                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
                                       {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
                                     </Button>
                                   </li>

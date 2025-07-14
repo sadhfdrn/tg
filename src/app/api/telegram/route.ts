@@ -144,11 +144,12 @@ async function deleteMessage(chatId: string | number, messageId: number) {
     }
 }
 
-async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+async function answerCallbackQuery(callbackQueryId: string, text?: string, show_alert: boolean = false) {
     try {
         await axios.post(`${TELEGRAM_API_URL}/answerCallbackQuery`, {
             callback_query_id: callbackQueryId,
             text: text,
+            show_alert: show_alert
         });
     } catch (error) {
         console.error('Failed to answer callback query:', (error as any).response?.data || (error as any).message);
@@ -415,7 +416,8 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
         rows.push(episodeButtons.slice(i, i + 4));
     }
 
-    rows.push([{ text: `All ${start+1}-${Math.min(end, allAvailableEpisodes.length)}`, callback_data: `anime_ep_all_${start}` }]);
+    const episodeRangeEnd = Math.min(end, allAvailableEpisodes.length);
+    rows.push([{ text: `All ${start + 1}-${episodeRangeEnd}`, callback_data: `anime_ep_all_${start}_${episodeRangeEnd}` }]);
     
     const navButtons = [];
     if (allAvailableEpisodes.length > EPISODE_GROUP_SIZE) {
@@ -648,12 +650,54 @@ async function processIncomingMessage(chatId: string, text: string) {
     }
 }
 
+async function handleAnimeEpisodeDownload(chatId: string, episodeId: string) {
+    const statusMessageId = await sendMessage(chatId, "⏳ Fetching episode sources...");
+    try {
+        const sources = await getEpisodeSources(episodeId);
+        if (!sources || sources.sources.length === 0) {
+            if (statusMessageId) await editMessage(chatId, statusMessageId, "❌ Could not find any download sources for this episode.");
+            return;
+        }
+
+        const defaultSource = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
+        
+        if (statusMessageId) await editMessage(chatId, statusMessageId, `✅ Source found! Sending video now... (This may take a moment)`);
+        
+        // Use sendVideo endpoint
+        const response = await axios.post(`${TELEGRAM_API_URL}/sendVideo`, {
+            chat_id: chatId,
+            video: defaultSource.url,
+            caption: `Episode download`,
+            // Not all videos might have these, so send request without them first.
+            // supports_streaming: true, 
+        });
+
+        // If the video was sent successfully, we can delete the status message.
+        if (response.data.ok) {
+            if (statusMessageId) await deleteMessage(chatId, statusMessageId);
+        } else {
+            // If sending video fails (e.g., too large), send the link instead.
+            if (statusMessageId) await editMessage(chatId, statusMessageId, `⚠️ Video could not be sent directly. Here is the download link:\n\n${defaultSource.url}`);
+        }
+
+    } catch (error: any) {
+        console.error("Error fetching/sending anime episode:", error);
+        let errorMessage = `An unexpected error occurred: ${error.message}`;
+         if (axios.isAxiosError(error) && error.response) {
+            console.error("Telegram API Error Response:", error.response.data);
+            errorMessage = `Failed to send media: ${error.response.data.description || 'Unknown API error'}`;
+        }
+        if (statusMessageId) await editMessage(chatId, statusMessageId, `❌ ${errorMessage}`);
+    }
+}
+
 async function processCallbackQuery(callbackQuery: any) {
     const chatId = callbackQuery.message.chat.id.toString();
     const state = getUserState(chatId);
     const data = callbackQuery.data;
     const messageId = callbackQuery.message.message_id;
 
+    // Acknowledge the callback query immediately to prevent the client from timing out.
     await answerCallbackQuery(callbackQuery.id);
 
     const resetState = async () => {
@@ -703,19 +747,34 @@ async function processCallbackQuery(callbackQuery: any) {
     }
 
      if (data.startsWith('anime_ep_all_')) {
-        if (state.step !== 'awaiting_episode_selection') return;
-        // This is a placeholder for handling "Select All" logic.
-        const startEpisode = parseInt(data.split('_').pop() || '0') + 1;
-        await answerCallbackQuery(callbackQuery.id, `Selected all episodes from ${startEpisode}. Download logic not implemented.`);
+        if (state.step !== 'awaiting_episode_selection' || !state.animeInfo?.episodes) return;
+        
+        await answerCallbackQuery(callbackQuery.id, "Preparing to send all selected episodes...");
+        
+        const [,,startStr, endStr] = data.split('_');
+        const start = parseInt(startStr);
+        const end = parseInt(endStr);
+        
+        const allAvailableEpisodes = state.animeInfo.episodes.filter(ep => 
+            state.selectedSubOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
+        ).sort((a,b) => a.number - b.number) || [];
+
+        const episodesToDownload = allAvailableEpisodes.slice(start, end);
+
+        await sendMessage(chatId, `Found ${episodesToDownload.length} episodes. I will send them one by one.`);
+
+        for(const ep of episodesToDownload) {
+            await handleAnimeEpisodeDownload(chatId, ep.id);
+            // Add a small delay between messages to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
         return;
     }
 
      if (data.startsWith('anime_ep_')) {
         if (state.step !== 'awaiting_episode_selection') return;
-        // This is a placeholder for handling individual episode selection logic.
-        // For now, it will just show an alert.
         const episodeId = data.substring('anime_ep_'.length);
-        await answerCallbackQuery(callbackQuery.id, `Selected Episode ID: ${episodeId}. Download logic not implemented.`);
+        await handleAnimeEpisodeDownload(chatId, episodeId);
         return;
     }
 
@@ -740,7 +799,7 @@ async function processCallbackQuery(callbackQuery: any) {
                 state.step = 'awaiting_subdub_selection';
 
                 if (!info.hasSub && !info.hasDub) {
-                    await editMessageCaption(chatId, state.currentMessageId, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
+                    await editMessageCaption(chatId, state.currentMessageId!, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
                     state.step = 'awaiting_anime_selection';
                     return;
                 }
@@ -800,36 +859,10 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
             await editMessage(chatId, statusMessageId, `✅ Found ${response.media.length} media file(s). Sending now...`);
 
             for (const item of response.media) {
-                const form = new FormData();
-                form.append('chat_id', String(chatId));
-
-                if (item.caption) form.append('caption', item.caption);
-                
-                // The item.url is a data URI, which can cause 413 errors.
-                // We should be sending the URL directly if possible for Telegram to fetch.
-                // However, our current flow processes files locally.
-                // The fix here is to correctly use FormData with the base64-decoded buffer.
-                const isDataUri = item.url.startsWith('data:');
-                if (isDataUri) {
-                    const [meta, base64Data] = item.url.split(',');
-                    const fileBuffer = Buffer.from(base64Data, 'base64');
-                    const fieldName = item.type === 'video' ? 'video' : 'photo';
-                    form.append(fieldName, fileBuffer, { filename: `${fieldName}.${item.type === 'video' ? 'mp4' : 'jpg'}` });
-                    
-                    if (item.type === 'video') {
-                        await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
-                    } else {
-                        await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
-                    }
+                 if (item.type === 'video') {
+                    await axios.post(`${TELEGRAM_API_URL}/sendVideo`, { chat_id: String(chatId), video: item.url, caption: item.caption });
                 } else {
-                    // If it's not a data URI, assume it's a public URL Telegram can fetch
-                     if (item.type === 'video') {
-                        form.append('video', item.url);
-                        await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders() });
-                    } else {
-                        form.append('photo', item.url);
-                        await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders() });
-                    }
+                    await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, { chat_id: String(chatId), photo: item.url, caption: item.caption });
                 }
             }
              await deleteMessage(chatId, statusMessageId);
