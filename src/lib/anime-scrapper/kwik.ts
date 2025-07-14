@@ -1,8 +1,7 @@
 
 import { IVideo } from './models';
 import VideoExtractor from './video-extractor';
-import axios from 'axios';
-import { KWIK_COOKIE } from './utils';
+import { getCookies } from './cookie-service';
 
 class Kwik extends VideoExtractor {
   protected override serverName = 'kwik';
@@ -10,17 +9,14 @@ class Kwik extends VideoExtractor {
 
   private readonly host = 'https://animepahe.ru/';
 
-  constructor() {
-    super();
-    this.client = axios.create();
-  }
-
   override extract = async (videoUrl: URL): Promise<IVideo[]> => {
     try {
+      const cookies = await getCookies();
+
       const response = await fetch(videoUrl.href, {
         headers: { 
           Referer: this.host,
-          Cookie: KWIK_COOKIE,
+          Cookie: cookies.kwik,
          },
       });
 

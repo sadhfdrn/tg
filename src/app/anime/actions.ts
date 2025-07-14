@@ -35,3 +35,4 @@ export async function getEpisodeSources(episodeId: string): Promise<ISource> {
     console.error(err);
     throw new Error(err.message || `Failed to get episode sources from AnimeOwl.`);
   }
+}

@@ -1,192 +1,226 @@
+
 'use client';
-import { useState } from 'react';
-import Image from 'next/image';
-import { Search, Loader, Download } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { searchAnime, getAnimeInfo, getEpisodeSources } from './actions';
-import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
+import { load } from 'cheerio';
+import {
+  AnimeParser,
+  ISearch,
+  IAnimeInfo,
+  MediaStatus,
+  IAnimeResult,
+  ISource,
+  IAnimeEpisode,
+  IEpisodeServer,
+  MediaFormat,
+} from './models';
+import Kwik from './kwik';
+import { USER_AGENT } from './utils';
+import { getCookies } from './cookie-service';
 
-type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
+class AnimePahe extends AnimeParser {
+  override readonly name = 'AnimePahe';
+  protected override baseUrl = 'https://animepahe.ru';
+  protected override logo = 'https://animepahe.com/pikacon.ico';
+  protected override classPath = 'ANIME.AnimePahe';
 
-export default function AnimePage() {
-  const { toast } = useToast();
-  const [query, setQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<ISearch<AnimeResultWithInfo> | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
-  const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
+  private async Headers(sessionId?: string, referer?: string) {
+    const cookies = await getCookies();
+    return {
+      authority: 'animepahe.ru',
+      'user-agent': USER_AGENT,
+      accept: 'application/json, text/javascript, */*; q=0.01',
+      'accept-language': 'en-US,en;q=0.9',
+      'sec-ch-ua': '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin',
+      'x-requested-with': 'XMLHttpRequest',
+      dnt: '1',
+      cookie: cookies.animepahe,
+      referer: referer || (sessionId ? `${this.baseUrl}/anime/${sessionId}` : `${this.baseUrl}/`),
+    };
+  }
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-    setLoading(true);
-    setSearchResults(null);
+  override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
-      const results = await searchAnime(query);
-      setSearchResults(results);
-      if (results.results) {
-        results.results.forEach((anime, index) => {
-          if (!anime.info) {
-            handleFetchInfo(anime.id, index);
-          }
-        });
-      }
-    } catch (error) {
-      console.error(error);
-      const errorMessage = (error instanceof Error) ? error.message : 'Failed to search for anime.';
-      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFetchInfo = async (animeId: string, index: number) => {
-    setInfoLoading(prev => ({ ...prev, [animeId]: true }));
-    try {
-      const info = await getAnimeInfo(animeId);
-      setSearchResults(prev => {
-        if (!prev) return null;
-        const newResults = [...prev.results];
-        newResults[index] = { ...newResults[index], info };
-        return { ...prev, results: newResults };
+      const { data } = await this.client.get(`${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`, {
+        headers: await this.Headers(),
       });
-    } catch (error) {
-      console.error(error);
-      const errorMessage = (error instanceof Error) ? error.message : 'Failed to fetch anime details.';
-      toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
-    } finally {
-      setInfoLoading(prev => ({ ...prev, [animeId]: false }));
+
+      const res = {
+        results: data.data.map((item: any) => ({
+          id: item.session,
+          title: item.title,
+          image: item.poster,
+          rating: item.score,
+          releaseDate: item.year.toString(),
+          type: item.type,
+        })),
+      };
+
+      return res;
+    } catch (err) {
+      throw new Error((err as Error).message);
     }
   };
 
-  const handleDownload = async (episodeId: string, episodeTitle: string) => {
-    setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
+  override fetchAnimeInfo = async (id: string, episodePage: number = -1): Promise<IAnimeInfo> => {
+    const animeInfo: IAnimeInfo = {
+      id: id,
+      title: '',
+    };
+
     try {
-      const sources = await getEpisodeSources(episodeId);
-      const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
-      
-      if (!source?.url) {
-        throw new Error('No download source found.');
+      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, { headers: await this.Headers(id) });
+      const $ = load(res.data);
+
+      animeInfo.title = $('div.title-wrapper > h1 > span').first().text();
+      animeInfo.image = $('div.anime-poster a').attr('href');
+      animeInfo.cover = `https:${$('div.anime-cover').attr('data-src')}`;
+      animeInfo.description = $('div.anime-summary').text().trim();
+      animeInfo.genres = $('div.anime-genre ul li')
+        .map((i, el) => $(el).find('a').attr('title'))
+        .get();
+
+      switch ($('div.anime-info p:icontains("Status:") a').text().trim()) {
+        case 'Currently Airing':
+          animeInfo.status = MediaStatus.ONGOING;
+          break;
+        case 'Finished Airing':
+          animeInfo.status = MediaStatus.COMPLETED;
+          break;
+        default:
+          animeInfo.status = MediaStatus.UNKNOWN;
       }
-      
-      toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
-      
-      const response = await fetch(`/api/anime-proxy?url=${encodeURIComponent(source.url)}`);
-      if (!response.ok) {
-        throw new Error(`Proxy error: ${response.statusText}`);
+      animeInfo.type = $('div.anime-info > p:contains("Type:") > a')
+        .text()
+        .trim()
+        .toUpperCase() as MediaFormat;
+      animeInfo.releaseDate = $('div.anime-info > p:contains("Aired:")')
+        .text()
+        .split('to')[0]
+        .replace('Aired:', '')
+        .trim();
+      animeInfo.studios = $('div.anime-info > p:contains("Studio:")')
+        .text()
+        .replace('Studio:', '')
+        .trim()
+        .split('\n');
+
+      animeInfo.totalEpisodes = parseInt(
+        $('div.anime-info > p:contains("Episodes:")').text().replace('Episodes:', '')
+      );
+
+      animeInfo.episodes = [];
+      if (episodePage < 0) {
+        const {
+          data: { last_page, data },
+        } = await this.client.get(`${this.baseUrl}/api?m=release&id=${id}&sort=episode_asc&page=1`, {
+          headers: await this.Headers(id),
+        });
+
+        animeInfo.episodePages = last_page;
+
+        animeInfo.episodes.push(
+          ...data.map(
+            (item: any) =>
+              ({
+                id: `${id}/${item.session}`,
+                number: item.episode,
+                title: item.title,
+                image: item.snapshot,
+                duration: item.duration,
+                url: `${this.baseUrl}/play/${id}/${item.session}`,
+              } as IAnimeEpisode)
+          )
+        );
+
+        for (let i = 1; i < last_page; i++) {
+          animeInfo.episodes.push(...(await this.fetchEpisodes(id, i + 1)));
+        }
+      } else {
+        animeInfo.episodes.push(...(await this.fetchEpisodes(id, episodePage)));
       }
 
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
-      link.setAttribute('download', cleanTitle);
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-      
-      toast({ title: 'Success', description: 'Download started.' });
-
-    } catch (error) {
-      console.error(error);
-      const errorMessage = (error instanceof Error) ? error.message : 'An unknown error occurred.';
-      toast({ title: 'Error', description: `Failed to start download: ${errorMessage}`, variant: 'destructive' });
-    } finally {
-      setSourceLoading(prev => ({ ...prev, [episodeId]: false }));
+      return animeInfo;
+    } catch (err) {
+      throw new Error((err as Error).message);
     }
   };
 
-  return (
-    <div className="flex justify-center items-start min-h-screen bg-muted/40 p-4">
-      <Card className="w-full max-w-4xl">
-        <CardHeader>
-          <CardTitle>Anime Downloader</CardTitle>
-          <CardDescription>Search for your favorite anime and download episodes.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 mb-4">
-            <Input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="Search for an anime..."
-              className="flex-grow"
-            />
-            <Button onClick={handleSearch} disabled={loading}>
-              {loading ? <Loader className="animate-spin" /> : <Search />}
-            </Button>
-          </div>
+  override fetchEpisodeSources = async (episodeId: string): Promise<ISource> => {
+    try {
+      const { data } = await this.client.get(`${this.baseUrl}/play/${episodeId}`, {
+        headers: await this.Headers(episodeId.split('/')[0]),
+      });
 
-          <ScrollArea className="h-[60vh] pr-4">
-            <div className="space-y-4">
-              {searchResults?.results.map((anime, index) => (
-                <Card key={anime.id} className="overflow-hidden">
-                  <Accordion type="single" collapsible>
-                    <AccordionItem value={anime.id}>
-                      <AccordionTrigger
-                        className="p-4 hover:no-underline"
-                      >
-                        <div className="flex gap-4 items-center w-full">
-                          <Image
-                            src={anime.image || 'https://placehold.co/100x150.png'}
-                            alt={typeof anime.title === 'string' ? anime.title : (anime.title as any).english || ''}
-                            width={100}
-                            height={150}
-                            className="rounded-md object-cover"
-                          />
-                          <div className="text-left flex-grow">
-                            <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji}</h3>
-                            <div className="text-sm text-muted-foreground">{anime.type}</div>
-                          </div>
-                          {infoLoading[anime.id] && <Loader className="animate-spin mr-2" />}
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="p-4 pt-0">
-                        {anime.info ? (
-                          <>
-                            <div className="flex flex-wrap gap-1 mb-2">
-                                {anime.info.genres?.map(genre => (
-                                    <Badge key={genre} variant="secondary">{genre}</Badge>
-                                ))}
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-4">{anime.info.description}</p>
-                            <h4 className="font-semibold mb-2">Episodes</h4>
-                            <ScrollArea className="h-64 pr-3">
-                              <ul className="space-y-2">
-                                {anime.info.episodes?.map(ep => (
-                                  <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
-                                    <span className="text-sm">{ep.title}</span>
-                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
-                                      {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
-                                    </Button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </ScrollArea>
-                          </>
-                        ) : (
-                          <p>Loading details...</p>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-    </div>
-  );
+      const $ = load(data);
+
+      const links = $('div#resolutionMenu > button').map((i, el) => ({
+        url: $(el).attr('data-src')!,
+        quality: $(el).text(),
+        audio: $(el).attr('data-audio'),
+      }));
+      
+      const iSource: ISource = {
+        headers: {
+          Referer: 'https://kwik.si/',
+        },
+        sources: [],
+      };
+
+      for (const link of links) {
+        // Here we handle the pahe.win redirect
+        const paheWinUrl = new URL(link.url);
+        const paheWinRes = await this.client.get(paheWinUrl.href, { 
+            headers: { 
+                'Referer': `${this.baseUrl}/`,
+                'Cookie': (await getCookies()).pahewin
+            } 
+        });
+        const $$ = load(paheWinRes.data);
+        const kwikUrl = $$('body > script').html()?.match(/"([^"]+)"/)?.[1];
+
+        if(!kwikUrl) throw new Error("Could not extract kwik url from pahe.win")
+        
+        const res = await new Kwik().extract(new URL(kwikUrl));
+        res[0].quality = link.quality;
+        res[0].isDub = link.audio === 'eng';
+        iSource.sources.push(res[0]);
+      }
+      return iSource;
+    } catch (err) {
+      throw new Error((err as Error).message);
+    }
+  };
+
+  private fetchEpisodes = async (session: string, page: number): Promise<IAnimeEpisode[]> => {
+    const res = await this.client.get(
+      `${this.baseUrl}/api?m=release&id=${session}&sort=episode_asc&page=${page}`,
+      { headers: await this.Headers(session) }
+    );
+
+    const epData = res.data.data;
+
+    return [
+      ...epData.map(
+        (item: any): IAnimeEpisode => ({
+          id: `${session}/${item.session}`,
+          number: item.episode,
+          title: item.title,
+          image: item.snapshot,
+          duration: item.duration,
+          url: `${this.baseUrl}/play/${session}/${item.session}`,
+        })
+      ),
+    ] as IAnimeEpisode[];
+  };
+
+  override fetchEpisodeServers = (episodeLink: string): Promise<IEpisodeServer[]> => {
+    throw new Error('Method not implemented.');
+  };
 }
+
+export default AnimePahe;
