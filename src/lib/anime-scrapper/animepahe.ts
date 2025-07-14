@@ -22,18 +22,23 @@ class AnimePahe extends AnimeParser {
 
   override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
-      const { data } = await this.client.get(`${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`);
-      
+      const { data } = await this.client.get(`${this.baseUrl}/search?q=${encodeURIComponent(query)}`);
+      const $ = load(data);
+
       const res: ISearch<IAnimeResult> = {
-        results: data.data.map((item: any) => ({
-          id: item.session,
-          title: item.title,
-          image: item.poster,
-          rating: item.score,
-          releaseDate: item.year,
-          type: item.type,
-        })),
+        results: [],
       };
+
+      $('div.search-results > .item-container > .item-box').each((i, el) => {
+        const id = $(el).find('a.item-cover').attr('href')?.split('/').pop() ?? '';
+        res.results.push({
+          id: id,
+          title: $(el).find('a.item-title').text().trim(),
+          image: $(el).find('a.item-cover > img').attr('src'),
+          releaseDate: $(el).find('p.item-meta > span:nth-child(1)').text().trim(),
+          type: $(el).find('p.item-meta > span:nth-child(2)').text().trim() as MediaFormat,
+        });
+      });
 
       return res;
     } catch (err) {
