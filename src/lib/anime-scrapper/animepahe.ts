@@ -21,10 +21,24 @@ class AnimePahe extends AnimeParser {
   protected override logo = 'https://animepahe.com/pikacon.ico';
   protected override classPath = 'ANIME.AnimePahe';
 
+  private Headers(sessionId: string | false = false) {
+    const cookie = process.env.ANIMEPAHE_COOKIE || '';
+    if (!cookie) {
+        console.warn('ANIMEPAHE_COOKIE environment variable is not set. This may cause 403 errors.');
+    }
+    return {
+      'User-Agent': USER_AGENT,
+      'Referer': this.baseUrl,
+      'Cookie': cookie,
+    };
+  }
+
   override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
       const { data } = await this.client.get(
-        `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`
+        `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`, {
+            headers: this.Headers()
+        }
       );
 
       const res: ISearch<IAnimeResult> = {
@@ -51,9 +65,7 @@ class AnimePahe extends AnimeParser {
     };
 
     try {
-      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, {
-        headers: { Referer: this.baseUrl },
-      });
+      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, { headers: this.Headers(id) });
       const $ = load(res.data);
 
       animeInfo.title = $('div.title-wrapper > h1 > span').first().text();
@@ -81,7 +93,7 @@ class AnimePahe extends AnimeParser {
 
       const { data } = await this.client.get(
         `${this.baseUrl}/api?m=release&id=${id}&sort=episode_asc&page=1`,
-        { headers: { Referer: `${this.baseUrl}/anime/${id}` } }
+        { headers: this.Headers(id) }
       );
 
       animeInfo.totalEpisodes = data.total;
@@ -105,7 +117,7 @@ class AnimePahe extends AnimeParser {
   override fetchEpisodeSources = async (episodeId: string): Promise<ISource> => {
     try {
       const { data } = await this.client.get(`${this.baseUrl}/play/${episodeId}`, {
-        headers: { Referer: this.baseUrl },
+        headers: this.Headers(episodeId.split('/')[0]),
       });
 
       const $ = load(data);
