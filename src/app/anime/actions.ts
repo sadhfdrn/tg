@@ -1,13 +1,30 @@
+
 'use server';
 
 import AnimeOwl from '@/lib/anime-scrapper/animeowl';
+import AnimePahe from '@/lib/anime-scrapper/animepahe';
 import { IAnimeInfo, IAnimeResult, ISearch, ISource } from '@/lib/anime-scrapper/models';
 
 const animeowl = new AnimeOwl();
+const animepahe = new AnimePahe();
 
-export async function searchAnime(query: string): Promise<ISearch<IAnimeResult>> {
+type AnimeProvider = 'animeowl' | 'animepahe';
+
+function getProvider(provider: AnimeProvider) {
+    switch (provider) {
+        case 'animeowl':
+            return animeowl;
+        case 'animepahe':
+            return animepahe;
+        default:
+            return animeowl;
+    }
+}
+
+export async function searchAnime(query: string, provider: AnimeProvider): Promise<ISearch<IAnimeResult>> {
   try {
-    const res = await animeowl.search(query);
+    const activeProvider = getProvider(provider);
+    const res = await activeProvider.search(query);
     const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
     return { ...res, results: validResults };
   } catch (err) {
@@ -16,9 +33,10 @@ export async function searchAnime(query: string): Promise<ISearch<IAnimeResult>>
   }
 }
 
-export async function getAnimeInfo(id: string): Promise<IAnimeInfo> {
+export async function getAnimeInfo(id: string, provider: AnimeProvider): Promise<IAnimeInfo> {
   try {
-    const res = await animeowl.fetchAnimeInfo(id);
+    const activeProvider = getProvider(provider);
+    const res = await activeProvider.fetchAnimeInfo(id);
     return res;
   } catch (err) {
     console.error(err);
@@ -26,9 +44,10 @@ export async function getAnimeInfo(id: string): Promise<IAnimeInfo> {
   }
 }
 
-export async function getEpisodeSources(episodeId: string): Promise<ISource> {
+export async function getEpisodeSources(episodeId: string, provider: AnimeProvider): Promise<ISource> {
   try {
-    const res = await animeowl.fetchEpisodeSources(episodeId);
+    const activeProvider = getProvider(provider);
+    const res = await activeProvider.fetchEpisodeSources(episodeId);
     return res;
   } catch (err) {
     console.error(err);

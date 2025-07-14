@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
 type ImageQuality = 'low' | 'medium' | 'high';
+type AnimeProvider = 'animeowl' | 'animepahe';
 
 export default function AnimePage() {
   const { toast } = useToast();
@@ -26,18 +27,19 @@ export default function AnimePage() {
   const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
   const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
   const [imageQuality, setImageQuality] = useState<ImageQuality>('medium');
+  const [provider, setProvider] = useState<AnimeProvider>('animeowl');
 
   const handleSearch = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setSearchResults(null);
     try {
-      const results = await searchAnime(query);
+      const results = await searchAnime(query, provider);
       setSearchResults(results);
       if (results.results) {
         results.results.forEach((anime, index) => {
           if (!anime.info) {
-            handleFetchInfo(anime.id, index);
+            handleFetchInfo(anime.id, index, provider);
           }
         });
       }
@@ -49,10 +51,10 @@ export default function AnimePage() {
     }
   };
 
-  const handleFetchInfo = async (animeId: string, index: number) => {
+  const handleFetchInfo = async (animeId: string, index: number, provider: AnimeProvider) => {
     setInfoLoading(prev => ({ ...prev, [animeId]: true }));
     try {
-      const info = await getAnimeInfo(animeId);
+      const info = await getAnimeInfo(animeId, provider);
       setSearchResults(prev => {
         if (!prev) return null;
         const newResults = [...prev.results];
@@ -67,10 +69,10 @@ export default function AnimePage() {
     }
   };
 
-  const handleDownload = async (episodeId: string, episodeTitle: string) => {
+  const handleDownload = async (episodeId: string, episodeTitle: string, provider: AnimeProvider) => {
     setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
     try {
-      const sources = await getEpisodeSources(episodeId);
+      const sources = await getEpisodeSources(episodeId, provider);
       const source = sources.sources.find(s => s.quality === 'default') || sources.sources[0];
       
       if (!source?.url) {
@@ -79,7 +81,6 @@ export default function AnimePage() {
       
       toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
 
-      // The proxy handles the download, so we create a link and click it.
       const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
       const link = document.createElement('a');
       link.href = proxyUrl;
@@ -127,6 +128,15 @@ export default function AnimePage() {
               placeholder="Search for an anime..."
               className="flex-grow"
             />
+            <Select value={provider} onValueChange={(value: AnimeProvider) => setProvider(value)}>
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Provider" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="animeowl">AnimeOwl</SelectItem>
+                    <SelectItem value="animepahe">AnimePahe</SelectItem>
+                </SelectContent>
+            </Select>
              <Select value={imageQuality} onValueChange={(value: ImageQuality) => setImageQuality(value)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Image Quality" />
@@ -181,7 +191,7 @@ export default function AnimePage() {
                                 {anime.info.episodes?.map(ep => (
                                   <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
                                     <span className="text-sm">{ep.title}</span>
-                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
+                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`, provider)} disabled={sourceLoading[ep.id]}>
                                       {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
                                     </Button>
                                   </li>
