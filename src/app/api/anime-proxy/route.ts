@@ -16,23 +16,66 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(url, {
-      headers: {
+    // Try multiple approaches to bypass 403 errors
+    const attempts = [
+      // Attempt 1: More complete browser headers
+      {
         'Referer': 'https://animeowl.me/',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'video',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'cross-site',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      },
+      // Attempt 2: Mobile user agent
+      {
+        'Referer': 'https://animeowl.me/',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         'Accept': 'video/mp4,video/*,*/*;q=0.9',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'identity', // Prevent compression issues
-        'Range': 'bytes=0-', // Enable range requests for better streaming
+        'Accept-Encoding': 'identity',
       },
-      // Add timeout to prevent hanging
-      signal: AbortSignal.timeout(30000), // 30 seconds timeout
-    });
+      // Attempt 3: Minimal headers
+      {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+      }
+    ];
 
-    if (!response.ok) {
-      console.error(`Fetch failed: ${response.status} ${response.statusText}`);
-      return new NextResponse(`Failed to fetch video: ${response.status} ${response.statusText}`, { 
-        status: response.status 
+    let response;
+    let lastError;
+
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        console.log(`Attempt ${i + 1} with different headers`);
+        response = await fetch(url, {
+          headers: attempts[i],
+          signal: AbortSignal.timeout(30000),
+        });
+
+        if (response.ok) {
+          console.log(`Success on attempt ${i + 1}`);
+          break;
+        } else {
+          console.log(`Attempt ${i + 1} failed: ${response.status}`);
+          lastError = response;
+        }
+      } catch (error) {
+        console.log(`Attempt ${i + 1} threw error:`, error);
+        lastError = error;
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.error(`All attempts failed. Last error: ${lastError instanceof Response ? lastError.status + ' ' + lastError.statusText : lastError}`);
+      return new NextResponse(`Failed to fetch video after multiple attempts: ${lastError instanceof Response ? lastError.status + ' ' + lastError.statusText : 'Network error'}`, { 
+        status: lastError instanceof Response ? lastError.status : 502
       });
     }
 
@@ -137,4 +180,4 @@ function getFilenameFromUrl(url: string): string | null {
   } catch {
     return null;
   }
-}
+  }
