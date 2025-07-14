@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get('url');
+  const customIP = searchParams.get('ip'); // Allow IP to be passed as query parameter
 
   if (!url) {
     return new NextResponse('URL parameter is missing', { status: 400 });
@@ -16,9 +17,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // IP to simulate (can be made configurable via environment variable or query param)
+    const simulatedIP = customIP || process.env.SIMULATED_IP || '34.13.167.125';
+    
     // Try multiple approaches to bypass 403 errors
     const attempts = [
-      // Attempt 1: More complete browser headers
+      // Attempt 1: More complete browser headers with simulated IP
       {
         'Referer': 'https://animeowl.me/',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -32,19 +36,33 @@ export async function GET(request: NextRequest) {
         'Sec-Fetch-Site': 'cross-site',
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
+        // IP simulation headers
+        'X-Forwarded-For': simulatedIP,
+        'X-Real-IP': simulatedIP,
+        'X-Client-IP': simulatedIP,
+        'X-Originating-IP': simulatedIP,
+        'CF-Connecting-IP': simulatedIP, // Cloudflare
+        'True-Client-IP': simulatedIP,   // Cloudflare
       },
-      // Attempt 2: Mobile user agent
+      // Attempt 2: Mobile user agent with simulated IP
       {
         'Referer': 'https://animeowl.me/',
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         'Accept': 'video/mp4,video/*,*/*;q=0.9',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'identity',
+        // IP simulation headers
+        'X-Forwarded-For': simulatedIP,
+        'X-Real-IP': simulatedIP,
+        'X-Client-IP': simulatedIP,
       },
-      // Attempt 3: Minimal headers
+      // Attempt 3: Minimal headers with simulated IP
       {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': '*/*',
+        // IP simulation headers
+        'X-Forwarded-For': simulatedIP,
+        'X-Real-IP': simulatedIP,
       }
     ];
 
@@ -53,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     for (let i = 0; i < attempts.length; i++) {
       try {
-        console.log(`Attempt ${i + 1} with different headers`);
+        console.log(`Attempt ${i + 1} with different headers and IP: ${simulatedIP}`);
         response = await fetch(url, {
           headers: attempts[i],
           signal: AbortSignal.timeout(30000),
@@ -180,4 +198,4 @@ function getFilenameFromUrl(url: string): string | null {
   } catch {
     return null;
   }
-  }
+}
