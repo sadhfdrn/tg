@@ -13,7 +13,8 @@ import {
 import AnimeParser from './anime-parser';
 import Kwik from './kwik';
 import { USER_AGENT } from './utils';
-import { AxiosRequestConfig } from 'axios';
+import fs from 'fs';
+import path from 'path';
 
 class AnimePahe extends AnimeParser {
   override readonly name = 'AnimePahe';
@@ -22,10 +23,16 @@ class AnimePahe extends AnimeParser {
   protected override classPath = 'ANIME.AnimePahe';
 
   private Headers(sessionId: string | false = false) {
-    const cookie = process.env.ANIMEPAHE_COOKIE || '';
-    if (!cookie) {
-        console.warn('ANIMEPAHE_COOKIE environment variable is not set. This may cause 403 errors.');
+    let cookie = '';
+    try {
+        // Construct the full path to the cookie file
+        const cookiePath = path.join(process.cwd(), 'xiq1ww.txt');
+        // Read the cookie from the file
+        cookie = fs.readFileSync(cookiePath, 'utf-8').trim();
+    } catch (err) {
+        console.warn('Could not read animepahe cookie file.', err);
     }
+    
     return {
       'User-Agent': USER_AGENT,
       'Referer': this.baseUrl,
