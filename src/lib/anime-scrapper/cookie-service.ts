@@ -1,6 +1,3 @@
-
-import { promises as fs } from 'fs';
-import path from 'path';
 import axios from 'axios';
 
 let cachedCookies: Record<string, string> | null = null;

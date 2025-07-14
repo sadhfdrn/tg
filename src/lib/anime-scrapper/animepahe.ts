@@ -1,6 +1,4 @@
 
-'use client';
-
 import { load } from 'cheerio';
 import {
   AnimeParser,
@@ -46,7 +44,7 @@ class AnimePahe extends AnimeParser {
   override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
       const { data } = await this.client.get(`${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`, {
-        headers: await this.Headers(),
+        headers: await this.Headers(undefined, `${this.baseUrl}/`),
       });
 
       const res = {
