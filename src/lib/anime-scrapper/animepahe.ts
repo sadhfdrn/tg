@@ -22,36 +22,18 @@ class AnimePahe extends AnimeParser {
   protected override logo = 'https://animepahe.com/pikacon.ico';
   protected override classPath = 'ANIME.AnimePahe';
 
-  private Headers(sessionId: string | false = false) {
-    let cookie = '';
-    try {
-        const cookiePath = path.join(process.cwd(), 'xiq1ww.txt');
-        const cookieFile = fs.readFileSync(cookiePath, 'utf-8');
+  private Headers() {
+    // Reading the cookie from an environment variable is more robust
+    // than trying to parse a file that might change format.
+    const cookie = process.env.ANIMEPAHE_COOKIE || '';
 
-        // Parse Netscape cookie file format
-        cookie = cookieFile
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line && !line.startsWith('#')) // ignore comments and empty lines
-            .map(line => {
-                const parts = line.split('\t');
-                if (parts.length >= 7) {
-                    const name = parts[5];
-                    const value = parts[6];
-                    return `${name}=${value}`;
-                }
-                return null;
-            })
-            .filter(Boolean) // remove nulls
-            .join('; ');
-
-    } catch (err) {
-        console.warn('Could not read or parse animepahe cookie file.', err);
+    if (!cookie) {
+        console.warn('ANIMEPAHE_COOKIE environment variable is not set. This may result in 403 errors.');
     }
-    
+
     return {
       'User-Agent': USER_AGENT,
-      'Referer': this.baseUrl,
+      'Referer': `${this.baseUrl}/`, // Set a consistent Referer
       'Cookie': cookie,
     };
   }
@@ -59,21 +41,27 @@ class AnimePahe extends AnimeParser {
   override search = async (query: string): Promise<ISearch<IAnimeResult>> => {
     try {
       const { data } = await this.client.get(
-        `${this.baseUrl}/api?m=search&q=${encodeURIComponent(query)}`, {
-            headers: this.Headers()
+        `${this.baseUrl}/search?q=${encodeURIComponent(query)}`,
+        {
+          headers: this.Headers(),
         }
       );
+      const $ = load(data);
 
       const res: ISearch<IAnimeResult> = {
-        results: data.data.map((item: any) => ({
-          id: item.session,
-          title: item.title,
-          image: item.poster,
-          rating: item.score,
-          releaseDate: item.year,
-          type: item.type as MediaFormat,
-        })),
+        results: [],
       };
+
+      $('div.timeline-content > .timeline-item').each((i, el) => {
+        res.results.push({
+            id: $(el).find('a.timeline-poster').attr('href')?.split('/')[2]!,
+            title: $(el).find('div.timeline-body > h5 > a').text()?.trim()!,
+            image: $(el).find('a.timeline-poster > img').attr('src')!,
+            rating: parseFloat($(el).find('div.timeline-body > div > p > strong').text()?.trim()) || 0,
+            releaseDate: $(el).find('div.timeline-body > p:nth-child(2)').text()?.trim(),
+            type: $(el).find('div.timeline-body > div > p > a').text()?.trim() as MediaFormat,
+        });
+      });
 
       return res;
     } catch (err) {
@@ -88,7 +76,7 @@ class AnimePahe extends AnimeParser {
     };
 
     try {
-      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, { headers: this.Headers(id) });
+      const res = await this.client.get(`${this.baseUrl}/anime/${id}`, { headers: this.Headers() });
       const $ = load(res.data);
 
       animeInfo.title = $('div.title-wrapper > h1 > span').first().text();
@@ -116,7 +104,7 @@ class AnimePahe extends AnimeParser {
 
       const { data } = await this.client.get(
         `${this.baseUrl}/api?m=release&id=${id}&sort=episode_asc&page=1`,
-        { headers: this.Headers(id) }
+        { headers: this.Headers() }
       );
 
       animeInfo.totalEpisodes = data.total;
@@ -140,7 +128,7 @@ class AnimePahe extends AnimeParser {
   override fetchEpisodeSources = async (episodeId: string): Promise<ISource> => {
     try {
       const { data } = await this.client.get(`${this.baseUrl}/play/${episodeId}`, {
-        headers: this.Headers(episodeId.split('/')[0]),
+        headers: this.Headers(),
       });
 
       const $ = load(data);
