@@ -76,31 +76,17 @@ export default function AnimePage() {
       
       toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
 
-      // Fetch the video through the proxy
+      // The proxy handles the download, so we create a link and click it.
       const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
-      const response = await fetch(proxyUrl);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch video: ${response.statusText} - ${errorText}`);
-      }
-
-      // Create a blob from the response
-      const blob = await response.blob();
-      
-      // Create a temporary link to trigger the download
-      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
+      link.href = proxyUrl;
       const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
       link.setAttribute('download', cleanTitle);
       
       document.body.appendChild(link);
       link.click();
       
-      // Clean up the temporary link and blob URL
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
       
       toast({ title: 'Success', description: 'Download started.' });
 

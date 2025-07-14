@@ -460,16 +460,10 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     }
 
     const episodeRangeEnd = Math.min(end, allAvailableEpisodes.length);
-    const allEpisodeIds = episodesToShow.map(ep => {
-         const episodeIds = ep.id.split('$')[1];
-         const subId = episodeIds.split('&')[0] || '';
-         const dubId = episodeIds.split('&')[1] || '';
-         const finalId = state.selectedSubOrDub === SubOrSub.SUB ? subId : dubId;
-         return `${ep.id.split('$')[0]}$${finalId}`;
-    });
-
     if (episodesToShow.length > 1) {
-       rows.push([{ text: `All ${start + 1}-${episodeRangeEnd}`, callback_data: `anime_ep_all_${allEpisodeIds.join('&')}` }]);
+        // Create a shorter callback_data string for "all"
+        const allCallbackData = `anime_ep_all_${info.id}_${state.selectedSubOrDub}_${state.episodePage}`;
+        rows.push([{ text: `All ${start + 1}-${episodeRangeEnd}`, callback_data: allCallbackData }]);
     }
     
     const navButtons = [];
@@ -704,7 +698,7 @@ async function processIncomingMessage(chatId: string, text: string) {
 }
 
 async function handleAnimeEpisodeDownload(chatId: string, episodeId: string, request: Request) {
-    const statusMessageId = await sendMessage(chatId, "⏳ Fetching episode sources...");
+    const statusMessageId = await sendMessage(chatId, `⏳ Fetching episode sources for ${episodeId.split('$')[0]}...`);
     try {
         const sources = await getEpisodeSources(episodeId);
         if (!sources || sources.sources.length === 0) {
@@ -805,13 +799,29 @@ async function processCallbackQuery(callbackQuery: any, request: Request) {
         
         await answerCallbackQuery(callbackQuery.id, "Preparing to send all selected episodes...");
         
-        const episodeIds = data.substring('anime_ep_all_'.length).split('&');
+        const [_, __, ___, animeId, subOrDub, pageStr] = data.split('_');
+        const page = parseInt(pageStr);
+
+        const allAvailableEpisodes = state.animeInfo.episodes?.filter(ep => 
+            subOrDub === SubOrSub.SUB ? ep.isSubbed : ep.isDubbed
+        ).sort((a,b) => a.number - b.number) || [];
+
+        const start = page * EPISODE_GROUP_SIZE;
+        const end = start + EPISODE_GROUP_SIZE;
+        const episodesToDownload = allAvailableEpisodes.slice(start, end);
+
+        const episodeIds = episodesToDownload.map(ep => {
+            const episodeIdParts = ep.id.split('$')[1];
+            const subId = episodeIdParts.split('&')[0] || '';
+            const dubId = episodeIdParts.split('&')[1] || '';
+            const finalId = subOrDub === SubOrSub.SUB ? subId : dubId;
+            return `${ep.id.split('$')[0]}$${finalId}`;
+        });
 
         await sendMessage(chatId, `Found ${episodeIds.length} episodes. I will send them one by one.`);
 
         for(const epId of episodeIds) {
             await handleAnimeEpisodeDownload(chatId, epId, request);
-            // Add a small delay between messages to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
         return;
