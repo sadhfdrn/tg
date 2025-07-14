@@ -192,7 +192,7 @@ class AnimeOwl extends AnimeParser {
           groupedMap.set(dub.title!, {
             id: `${id.split('$')[0]}$${dub.id!}`,
             title: dub.title!,
-            number: dub.number!,
+            number: sub.number!,
             url: dub.url,
             isSubbed: false,
             isDubbed: true,

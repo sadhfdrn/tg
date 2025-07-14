@@ -16,7 +16,6 @@ import { IAnimeInfo, IAnimeResult, ISearch } from '@/lib/anime-scrapper/models';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type AnimeResultWithInfo = IAnimeResult & { info?: IAnimeInfo };
-type ImageQuality = 'low' | 'medium' | 'high';
 type AnimeProvider = 'animeowl' | 'animepahe';
 
 export default function AnimePage() {
@@ -26,7 +25,6 @@ export default function AnimePage() {
   const [loading, setLoading] = useState(false);
   const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
   const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
-  const [imageQuality, setImageQuality] = useState<ImageQuality>('medium');
   const [provider, setProvider] = useState<AnimeProvider>('animeowl');
 
   const handleSearch = async () => {
@@ -80,10 +78,17 @@ export default function AnimePage() {
       }
       
       toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
+      
+      const response = await fetch(`/api/anime-proxy?url=${encodeURIComponent(source.url)}`);
+      if (!response.ok) {
+        throw new Error(`Proxy error: ${response.statusText}`);
+      }
 
-      const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
-      link.href = proxyUrl;
+      link.href = blobUrl;
       const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
       link.setAttribute('download', cleanTitle);
       
@@ -91,6 +96,7 @@ export default function AnimePage() {
       link.click();
       
       document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
       
       toast({ title: 'Success', description: 'Download started.' });
 
@@ -100,15 +106,6 @@ export default function AnimePage() {
       toast({ title: 'Error', description: `Failed to start download: ${errorMessage}`, variant: 'destructive' });
     } finally {
       setSourceLoading(prev => ({ ...prev, [episodeId]: false }));
-    }
-  };
-
-  const getImageSize = () => {
-    switch (imageQuality) {
-      case 'low': return { width: 50, height: 75 };
-      case 'medium': return { width: 75, height: 112 };
-      case 'high': return { width: 100, height: 150 };
-      default: return { width: 75, height: 112 };
     }
   };
 
@@ -137,16 +134,6 @@ export default function AnimePage() {
                     <SelectItem value="animepahe">AnimePahe</SelectItem>
                 </SelectContent>
             </Select>
-             <Select value={imageQuality} onValueChange={(value: ImageQuality) => setImageQuality(value)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Image Quality" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low Quality</SelectItem>
-                <SelectItem value="medium">Medium Quality</SelectItem>
-                <SelectItem value="high">High Quality</SelectItem>
-              </SelectContent>
-            </Select>
             <Button onClick={handleSearch} disabled={loading}>
               {loading ? <Loader className="animate-spin" /> : <Search />}
             </Button>
@@ -165,8 +152,8 @@ export default function AnimePage() {
                           <Image
                             src={anime.image || 'https://placehold.co/100x150.png'}
                             alt={typeof anime.title === 'string' ? anime.title : (anime.title as any).english || ''}
-                            width={getImageSize().width}
-                            height={getImageSize().height}
+                            width={100}
+                            height={150}
                             className="rounded-md object-cover"
                           />
                           <div className="text-left flex-grow">

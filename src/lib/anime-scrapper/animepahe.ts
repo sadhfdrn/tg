@@ -1,7 +1,6 @@
 
 import { load } from 'cheerio';
 import {
-  AnimeParser,
   ISearch,
   IAnimeInfo,
   MediaStatus,
@@ -11,6 +10,7 @@ import {
   IEpisodeServer,
   MediaFormat,
 } from './models';
+import AnimeParser from './anime-parser';
 import Kwik from './kwik';
 import axios from 'axios';
 
@@ -101,7 +101,7 @@ class AnimePahe extends AnimeParser {
         url: $(el).attr('data-src')!,
         quality: $(el).text(),
         audio: $(el).attr('data-audio'),
-      }));
+      })).get();
 
       const iSource: ISource = {
         headers: { Referer: 'https://kwik.cx/' },
