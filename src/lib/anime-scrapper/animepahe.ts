@@ -12,7 +12,7 @@ import {
 } from './models';
 import AnimeParser from './anime-parser';
 import Kwik from './kwik';
-import { USER_AGENT } from '@/lib/consumet.ts/src/utils';
+import { USER_AGENT } from './utils';
 
 class AnimePahe extends AnimeParser {
   override readonly name = 'AnimePahe';
