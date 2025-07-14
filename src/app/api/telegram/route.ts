@@ -412,7 +412,7 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
         rows.push(episodeButtons.slice(i, i + 4));
     }
 
-    rows.push([{ text: `All ${start+1}-${end}`, callback_data: `anime_ep_all_${start}` }]);
+    rows.push([{ text: `All ${start+1}-${Math.min(end, allAvailableEpisodes.length)}`, callback_data: `anime_ep_all_${start}` }]);
     
     const navButtons = [];
     if (allAvailableEpisodes.length > EPISODE_GROUP_SIZE) {
@@ -696,6 +696,14 @@ async function processCallbackQuery(callbackQuery: any) {
         if (state.step !== 'awaiting_episode_group_selection') return;
         state.episodePage = parseInt(data.split('_').pop() || '0') / EPISODE_GROUP_SIZE;
         await presentEpisodeSelection(chatId, state);
+        return;
+    }
+
+     if (data.startsWith('anime_ep_all_')) {
+        if (state.step !== 'awaiting_episode_selection') return;
+        // This is a placeholder for handling "Select All" logic.
+        const startEpisode = parseInt(data.split('_').pop() || '0') + 1;
+        await answerCallbackQuery(callbackQuery.id, `Selected all episodes from ${startEpisode}. Download logic not implemented.`);
         return;
     }
 
