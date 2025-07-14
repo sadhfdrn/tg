@@ -32,13 +32,16 @@ async function fetchAndParseCookies(): Promise<Record<string, string>> {
     }
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
+        const errorData = error.response?.data;
+        const serverErrorMessage = errorData?.error || JSON.stringify(errorData);
         console.error('Axios error fetching cookies from API:', {
             message: error.message,
             url: error.config?.url,
             status: error.response?.status,
-            data: error.response?.data
+            data: serverErrorMessage
         });
-        throw new Error(`Failed to connect to cookie service: ${error.message}`);
+        // Pass the specific error from the cookie service back to the client
+        throw new Error(`Failed to connect to cookie service: ${serverErrorMessage || error.message}`);
     }
     console.error('Generic error fetching cookies from API:', error);
     throw new Error('Failed to retrieve fresh cookies from the Puppeteer service.');
