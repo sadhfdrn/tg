@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import FormData from 'form-data';
 import { handleMessage } from '@/app/actions';
-import { searchAnime, getAnimeInfo, getEpisodeSources } from '@/lib/anime-scrapper/actions';
+import { getAnimeInfo, getEpisodeSources, searchAnime } from '@/lib/anime-scrapper/actions';
 import { IAnimeResult, IAnimeInfo, SubOrSub, IAnimeEpisode } from '@/lib/anime-scrapper/models';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -310,11 +310,33 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
         return;
     }
 
-    const currentIndex = state.animeSearchIndex || 0;
-    const anime = results[currentIndex];
-    const title = typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji;
-    const caption = `*${title}*\n\n*Episodes:* ${anime.episodes || 'N/A'}\n\n*Description:* Not available for this provider.`;
-    const photoUrl = anime.image || 'https://via.placeholder.com/225x350.png?text=No+Image';
+    const currentIndex = state.animeSearchIndex ?? 0;
+    const currentAnime = results[currentIndex];
+    
+    // Pre-fetch anime info
+    let animeInfo: IAnimeInfo | null = null;
+    let infoError = false;
+    try {
+        animeInfo = await getAnimeInfo(currentAnime.id);
+        state.animeInfo = animeInfo; // Store it in the state for the 'select' action
+    } catch(e) {
+        console.error("Could not pre-fetch anime info", e);
+        infoError = true;
+    }
+    
+    const title = typeof currentAnime.title === 'string' ? currentAnime.title : (currentAnime.title as any).english || (currentAnime.title as any).romaji;
+    
+    let caption = `*${title}*\n\n`;
+    if (animeInfo) {
+        caption += `*Episodes:* ${animeInfo.totalEpisodes || 'N/A'}\n\n`;
+        caption += `*Description:* ${animeInfo.description || 'Not available.'}`;
+    } else if (infoError) {
+        caption += `Could not fetch full details for this anime.`;
+    } else {
+         caption += `*Episodes:* ${currentAnime.episodes || 'N/A'}\n\n*Description:* Not available for this provider.`;
+    }
+
+    const photoUrl = currentAnime.image || 'https://via.placeholder.com/225x350.png?text=No+Image';
     const reply_markup = getAnimeNavigationKeyboard(currentIndex, results.length);
 
     if (state.currentMessageId) {
@@ -327,6 +349,7 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
             }, reply_markup);
         } catch (e) {
             console.error("Editing media failed, sending new message.", (e as any).response?.data || (e as any).message);
+            // If editing fails (e.g., changing media type), delete and send a new one.
             await deleteMessage(chatId, state.currentMessageId);
             const newMessageId = await sendPhoto(chatId, photoUrl, caption, reply_markup);
             if (newMessageId) state.currentMessageId = newMessageId;
@@ -796,36 +819,33 @@ async function processCallbackQuery(callbackQuery: any, request: Request) {
             }
             await sendOrEditAnimeMessage(chatId, state);
         } else if (data === 'anime_select') {
-            const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
+            const info = state.animeInfo; // Use the pre-fetched info
             
-            const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : (selectedAnime.title as any).english || (selectedAnime.title as any).romaji;
-            if (state.currentMessageId) await editMessageCaption(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
-            else state.currentMessageId = await sendMessage(chatId, `Fetching details for *${title}*...`);
+            if (!info) {
+                 await answerCallbackQuery(callbackQuery.id, "Details not available, cannot select.", true);
+                 return;
+            }
+
+            state.step = 'awaiting_subdub_selection';
             
-            try {
-                const info = await getAnimeInfo(selectedAnime.id);
-                state.animeInfo = info;
-                state.step = 'awaiting_subdub_selection';
+            const title = typeof info.title === 'string' ? info.title : (info.title as any).english || (info.title as any).romaji;
 
-                if (!info.hasSub && !info.hasDub) {
-                    await editMessageCaption(chatId, state.currentMessageId!, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
-                    state.step = 'awaiting_anime_selection';
-                    return;
-                }
+            if (!info.hasSub && !info.hasDub) {
+                await editMessageCaption(chatId, state.currentMessageId!, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
+                state.step = 'awaiting_anime_selection';
+                return;
+            }
+            
+            await editMessageCaption(chatId, state.currentMessageId!, `Fetching episode details for *${title}*...`);
 
-                if (info.hasSub && !info.hasDub) {
-                    state.selectedSubOrDub = SubOrSub.SUB;
-                    await presentEpisodeGroups(chatId, state);
-                } else if (!info.hasSub && info.hasDub) {
-                    state.selectedSubOrDub = SubOrSub.DUB;
-                    await presentEpisodeGroups(chatId, state);
-                } else {
-                    await editMessageCaption(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(info));
-                }
-                
-            } catch (error) {
-                console.error(error);
-                if(state.currentMessageId) await editMessageCaption(chatId, state.currentMessageId, `Could not fetch details for *${title}*.`);
+            if (info.hasSub && !info.hasDub) {
+                state.selectedSubOrDub = SubOrSub.SUB;
+                await presentEpisodeGroups(chatId, state);
+            } else if (!info.hasSub && info.hasDub) {
+                state.selectedSubOrDub = SubOrSub.DUB;
+                await presentEpisodeGroups(chatId, state);
+            } else {
+                await editMessageCaption(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(info));
             }
         }
     }
