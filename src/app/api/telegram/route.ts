@@ -65,7 +65,7 @@ async function sendMessage(chatId: string | number, text: string, reply_markup?:
             return response.data.result.message_id;
         }
     } catch (error) {
-        console.error('Failed to send message:', error);
+        console.error('Failed to send message:', (error as any).response?.data || (error as any).message);
     }
     return null;
 }
@@ -78,7 +78,7 @@ async function sendPhoto(chatId: string | number, photo: string, caption: string
             return response.data.result.message_id;
         }
     } catch (error) {
-        console.error('Failed to send photo:', error);
+        console.error('Failed to send photo:', (error as any).response?.data || (error as any).message);
     }
     return null;
 }
@@ -97,7 +97,7 @@ async function editMessage(chatId: string | number, messageId: number, text: str
         // Don't log "message is not modified" errors, as they are common and not critical.
         const errorResponse = (error as any).response?.data?.description;
         if (!errorResponse || !errorResponse.includes('message is not modified')) {
-            console.error('Failed to edit message:', errorResponse || (error as Error).message);
+            console.error('Failed to edit message text:', errorResponse || (error as Error).message);
         }
     }
 }
@@ -125,7 +125,10 @@ async function editMessageCaption(chatId: string | number, messageId: number, ca
             reply_markup: reply_markup
         });
     } catch (error) {
-        console.error('Failed to edit message caption:', (error as any).response?.data || (error as any).message);
+        const errorResponse = (error as any).response?.data?.description;
+         if (!errorResponse || !errorResponse.includes('message is not modified')) {
+            console.error('Failed to edit message caption:', errorResponse || (error as Error).message);
+        }
     }
 }
 
@@ -137,7 +140,7 @@ async function deleteMessage(chatId: string | number, messageId: number) {
             message_id: messageId,
         });
     } catch (error) {
-        console.error('Failed to delete message:', error);
+        console.error('Failed to delete message:', (error as any).response?.data || (error as any).message);
     }
 }
 
@@ -148,7 +151,7 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
             text: text,
         });
     } catch (error) {
-        console.error('Failed to answer callback query:', error);
+        console.error('Failed to answer callback query:', (error as any).response?.data || (error as any).message);
     }
 }
 
@@ -322,7 +325,7 @@ async function sendOrEditAnimeMessage(chatId: string, state: UserState) {
                 parse_mode: 'Markdown'
             }, reply_markup);
         } catch (e) {
-            console.error("Editing media failed, sending new message.", e);
+            console.error("Editing media failed, sending new message.", (e as any).response?.data || (e as any).message);
             await deleteMessage(chatId, state.currentMessageId);
             const newMessageId = await sendPhoto(chatId, photoUrl, caption, reply_markup);
             if (newMessageId) state.currentMessageId = newMessageId;
@@ -348,7 +351,7 @@ async function presentEpisodeGroups(chatId: string, state: UserState) {
     const title = typeof info.title === 'string' ? info.title : (info.title as any).english || (info.title as any).romaji;
 
     if (availableEpisodes.length === 0) {
-        await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for the selected version.`, getSubDubKeyboard(info));
+        await editMessageCaption(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for the selected version.`, getSubDubKeyboard(info));
         state.step = 'awaiting_subdub_selection';
         return;
     }
@@ -377,7 +380,7 @@ async function presentEpisodeGroups(chatId: string, state: UserState) {
     rows.push([{ text: '🔙 Back to Sub/Dub', callback_data: 'anime_back_to_subdub'}]);
 
     const reply_markup = { inline_keyboard: rows };
-    await editMessage(chatId, state.currentMessageId!, `*${title}* has a lot of episodes! Please select a range to view.`, reply_markup);
+    await editMessageCaption(chatId, state.currentMessageId!, `*${title}* has a lot of episodes! Please select a range to view.`, reply_markup);
 
 }
 
@@ -400,7 +403,7 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     const episodesToShow = allAvailableEpisodes.slice(start, end);
 
     if (episodesToShow.length === 0) {
-        await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for this selection.`, getSubDubKeyboard(info));
+        await editMessageCaption(chatId, state.currentMessageId!, `*${title}*\n\nSorry, no episodes found for this selection.`, getSubDubKeyboard(info));
         state.step = 'awaiting_subdub_selection';
         return;
     }
@@ -425,7 +428,7 @@ async function presentEpisodeSelection(chatId: string, state: UserState) {
     const reply_markup = { inline_keyboard: rows };
     const messageText = `*${title}*\nSelect episodes to download (${state.selectedSubOrDub}):`;
 
-    await editMessage(chatId, state.currentMessageId!, messageText, reply_markup);
+    await editMessageCaption(chatId, state.currentMessageId!, messageText, reply_markup);
 }
 
 
@@ -674,7 +677,7 @@ async function processCallbackQuery(callbackQuery: any) {
         if (!state.animeInfo) return;
         state.step = 'awaiting_subdub_selection';
         const title = typeof state.animeInfo.title === 'string' ? state.animeInfo.title : (state.animeInfo.title as any).english || (state.animeInfo.title as any).romaji;
-        await editMessage(chatId, messageId, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(state.animeInfo));
+        await editMessageCaption(chatId, messageId, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(state.animeInfo));
         return;
     }
 
@@ -687,7 +690,7 @@ async function processCallbackQuery(callbackQuery: any) {
     if (data.startsWith('anime_subdub_')) {
         if(state.step !== 'awaiting_subdub_selection') return;
         state.selectedSubOrDub = data.split('_').pop() as SubOrSub;
-        if(state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching episodes for ${state.selectedSubOrDub}...`);
+        if(state.currentMessageId) await editMessageCaption(chatId, state.currentMessageId, `Fetching episodes for ${state.selectedSubOrDub}...`);
         await presentEpisodeGroups(chatId, state);
         return;
     }
@@ -728,7 +731,7 @@ async function processCallbackQuery(callbackQuery: any) {
             const selectedAnime = state.animeSearchResults![state.animeSearchIndex!];
             
             const title = typeof selectedAnime.title === 'string' ? selectedAnime.title : (selectedAnime.title as any).english || (selectedAnime.title as any).romaji;
-            if (state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
+            if (state.currentMessageId) await editMessageCaption(chatId, state.currentMessageId, `Fetching details for *${title}*...`);
             else state.currentMessageId = await sendMessage(chatId, `Fetching details for *${title}*...`);
             
             try {
@@ -737,7 +740,7 @@ async function processCallbackQuery(callbackQuery: any) {
                 state.step = 'awaiting_subdub_selection';
 
                 if (!info.hasSub && !info.hasDub) {
-                    await editMessage(chatId, state.currentMessageId, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
+                    await editMessageCaption(chatId, state.currentMessageId, `Sorry, no watchable episodes found for *${title}*.`, getAnimeNavigationKeyboard(state.animeSearchIndex || 0, state.animeSearchResults?.length || 0));
                     state.step = 'awaiting_anime_selection';
                     return;
                 }
@@ -749,12 +752,12 @@ async function processCallbackQuery(callbackQuery: any) {
                     state.selectedSubOrDub = SubOrSub.DUB;
                     await presentEpisodeGroups(chatId, state);
                 } else {
-                    await editMessage(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(info));
+                    await editMessageCaption(chatId, state.currentMessageId!, `*${title}*\n\nThis anime has both Sub and Dub versions. Which one would you like?`, getSubDubKeyboard(info));
                 }
                 
             } catch (error) {
                 console.error(error);
-                if(state.currentMessageId) await editMessage(chatId, state.currentMessageId, `Could not fetch details for *${title}*.`);
+                if(state.currentMessageId) await editMessageCaption(chatId, state.currentMessageId, `Could not fetch details for *${title}*.`);
             }
         }
     }
@@ -802,13 +805,31 @@ async function processAndSendMedia(chatId: string, url: string, watermarkText?: 
 
                 if (item.caption) form.append('caption', item.caption);
                 
-                // Use the file URL directly
-                if (item.type === 'video') {
-                    form.append('video', item.url);
-                    await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
+                // The item.url is a data URI, which can cause 413 errors.
+                // We should be sending the URL directly if possible for Telegram to fetch.
+                // However, our current flow processes files locally.
+                // The fix here is to correctly use FormData with the base64-decoded buffer.
+                const isDataUri = item.url.startsWith('data:');
+                if (isDataUri) {
+                    const [meta, base64Data] = item.url.split(',');
+                    const fileBuffer = Buffer.from(base64Data, 'base64');
+                    const fieldName = item.type === 'video' ? 'video' : 'photo';
+                    form.append(fieldName, fileBuffer, { filename: `${fieldName}.${item.type === 'video' ? 'mp4' : 'jpg'}` });
+                    
+                    if (item.type === 'video') {
+                        await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
+                    } else {
+                        await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
+                    }
                 } else {
-                    form.append('photo', item.url);
-                    await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders(), maxBodyLength: Infinity, maxContentLength: Infinity });
+                    // If it's not a data URI, assume it's a public URL Telegram can fetch
+                     if (item.type === 'video') {
+                        form.append('video', item.url);
+                        await axios.post(`${TELEGRAM_API_URL}/sendVideo`, form, { headers: form.getHeaders() });
+                    } else {
+                        form.append('photo', item.url);
+                        await axios.post(`${TELEGRAM_API_URL}/sendPhoto`, form, { headers: form.getHeaders() });
+                    }
                 }
             }
              await deleteMessage(chatId, statusMessageId);
