@@ -83,7 +83,8 @@ export default function AnimePage() {
       
       const response = await fetch(`/api/anime-proxy?url=${encodeURIComponent(source.url)}`);
       if (!response.ok) {
-        throw new Error(`Proxy error: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Proxy error: ${response.status} - ${errorText}`);
       }
 
       const blob = await response.blob();
