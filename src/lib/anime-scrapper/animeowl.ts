@@ -175,7 +175,8 @@ class AnimeOwl extends AnimeParser {
 
       if (!episodePath) throw new Error('Episode path not found on page.');
 
-      const { data: intermediary } = await this.client.get(`${this.baseUrl}${episodePath}`);
+      const intermediaryUrl = episodePath.startsWith('http') ? episodePath : `${this.baseUrl}${episodePath}`;
+      const { data: intermediary } = await this.client.get(intermediaryUrl);
       const $intermediary = load(intermediary);
       const directLink = $intermediary('button#hot-anime-tab')?.attr('data-source');
   
