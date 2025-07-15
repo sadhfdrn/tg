@@ -191,9 +191,11 @@ class AnimePahe extends AnimeParser {
         if(!kwikUrl) throw new Error("Could not extract kwik url from pahe.win")
         
         const res = await new Kwik().extract(new URL(kwikUrl));
-        res[0].quality = link.quality;
-        res[0].isDub = link.audio === 'eng';
-        iSource.sources.push(res[0]);
+        if (res.length > 0) {
+            res[0].quality = link.quality;
+            res[0].isDub = link.audio === 'eng';
+            iSource.sources.push(res[0]);
+        }
       }
       return iSource;
     } catch (err) {

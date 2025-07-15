@@ -159,18 +159,22 @@ class AnimeOwl extends AnimeParser {
       const animeSlug = parts[0];
       const episodeIds = parts[1];
       
-      const { data } = await this.client.get(`${this.baseUrl}/anime/${animeSlug}`);
-      const $ = load(data);
-      
       const subId = episodeIds?.split('&')[0];
-      const dubId = episodeIds?.split('&')[1];
+      const dubId = episodeIds?.split('&')[1] || subId; // Fallback to subId if dubId is not present
+  
+      // Determine which episode path to use based on which ID is present.
+      // Prioritize the subbed version for finding the initial episode page.
+      const episodePathId = subId || dubId;
 
-      const findUrl = (selector: string, id: string | undefined) => {
-        if (!id) return null;
-        return $(`${selector} a#${id}`).attr('href');
-      };
-
-      const episodePath = findUrl('#anime-cover-sub-content .episode-node', subId) || findUrl('#anime-cover-dub-content .episode-node', dubId);
+      if (!episodePathId) {
+          throw new Error('No valid episode ID found in the provided string.');
+      }
+      
+      const { data: animePageData } = await this.client.get(`${this.baseUrl}/anime/${animeSlug}`);
+      const $ = load(animePageData);
+      
+      // Try to find the specific episode link
+      const episodePath = $(`a#${episodePathId}`).attr('href');
 
       if (!episodePath) throw new Error('Episode path not found on page.');
 
@@ -200,7 +204,7 @@ class AnimeOwl extends AnimeParser {
         return {
           id: $el.attr('id') || '',
           number: episodeNumber,
-          title: `Ep-${title}`,
+          title: `Ep ${title}`,
           url: `${this.baseUrl}${$el.attr('href')}`,
           isSubbed: subOrDub === SubOrSub.SUB,
           isDubbed: subOrDub === SubOrSub.DUB,
