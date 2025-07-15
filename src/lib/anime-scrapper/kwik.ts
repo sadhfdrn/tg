@@ -2,6 +2,7 @@
 import { IVideo } from './models';
 import VideoExtractor from './video-extractor';
 import { getCookies } from './cookie-service';
+import { load } from 'cheerio';
 
 class Kwik extends VideoExtractor {
   protected override serverName = 'kwik';
@@ -13,18 +14,14 @@ class Kwik extends VideoExtractor {
     try {
       const cookies = await getCookies();
 
-      const response = await fetch(videoUrl.href, {
+      const response = await this.client.get(videoUrl.href, {
         headers: { 
           Referer: this.host,
           Cookie: cookies.kwik,
          },
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch Kwik URL: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.text();
+      const data = response.data;
       
       const sourceMatch = data.match(/https?:\/\/[^"]*?\.m3u8[^"]*/);
       

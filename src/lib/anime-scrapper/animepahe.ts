@@ -187,10 +187,19 @@ class AnimePahe extends AnimeParser {
 
         const $$ = load(paheWinRes.data);
         const scriptContainingUrl = $$('body > script').html();
+
+        if (!scriptContainingUrl) {
+            console.warn("Could not find script containing URL on pahe.win");
+            continue;
+        }
+
         const unpacked = eval(scriptContainingUrl?.match(/eval\(function\(p,a,c,k,e,d\)(.|\n)*?{}\)\)/)?.[0] ?? '');
         const kwikUrl = unpacked?.match(/https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/)?.[0]
         
-        if(!kwikUrl) throw new Error("Could not extract kwik url from pahe.win");
+        if(!kwikUrl) {
+            console.warn("Could not extract kwik url from pahe.win script");
+            continue;
+        };
         
         const res = await new Kwik().extract(new URL(kwikUrl));
         if (res.length > 0) {
