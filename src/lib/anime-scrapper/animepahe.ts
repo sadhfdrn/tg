@@ -160,7 +160,7 @@ class AnimePahe extends AnimeParser {
         url: $(el).attr('data-src')!,
         quality: $(el).text(),
         audio: $(el).attr('data-audio'),
-      }));
+      })).get();
       
       const iSource: ISource = {
         headers: {

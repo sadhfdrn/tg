@@ -9,7 +9,7 @@ const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 const cookieClient = axios.create();
 
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
-  const cookieApiUrl = process.env.COOKIE_API_URL;
+  const cookieApiUrl = 'https://closed-jessi-neusersd-62ba5c33.koyeb.app';
 
   if (!cookieApiUrl) {
     throw new Error('COOKIE_API_URL environment variable must be set.');
