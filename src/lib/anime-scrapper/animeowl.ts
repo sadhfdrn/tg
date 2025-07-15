@@ -162,8 +162,6 @@ class AnimeOwl extends AnimeParser {
       const subId = episodeIds?.split('&')[0];
       const dubId = episodeIds?.split('&')[1] || subId; // Fallback to subId if dubId is not present
   
-      // Determine which episode path to use based on which ID is present.
-      // Prioritize the subbed version for finding the initial episode page.
       const episodePathId = subId || dubId;
 
       if (!episodePathId) {
@@ -173,7 +171,6 @@ class AnimeOwl extends AnimeParser {
       const { data: animePageData } = await this.client.get(`${this.baseUrl}/anime/${animeSlug}`);
       const $ = load(animePageData);
       
-      // Try to find the specific episode link
       const episodePath = $(`a#${episodePathId}`).attr('href');
 
       if (!episodePath) throw new Error('Episode path not found on page.');
@@ -184,7 +181,7 @@ class AnimeOwl extends AnimeParser {
   
       if (!directLink) throw new Error('Could not find the direct link to the server.');
     
-      const serverUrl = `${this.baseUrl}${directLink}`;
+      const serverUrl = directLink.startsWith('http') ? directLink : `${this.baseUrl}${directLink}`;
 
       return [{ name: 'luffy', url: serverUrl }];
     } catch (err) {

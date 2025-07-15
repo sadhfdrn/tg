@@ -34,13 +34,6 @@ export default function AnimePage() {
     try {
       const results = await searchAnime(query, provider);
       setSearchResults(results);
-      if (results.results) {
-        results.results.forEach((anime, index) => {
-          if (!anime.info) {
-            handleFetchInfo(anime.id, index);
-          }
-        });
-      }
     } catch (error) {
       console.error(error);
       const errorMessage = (error instanceof Error) ? error.message : `Failed to search for anime on ${provider}.`;
@@ -146,7 +139,11 @@ export default function AnimePage() {
             <div className="space-y-4">
               {searchResults?.results.map((anime, index) => (
                 <Card key={anime.id} className="overflow-hidden">
-                  <Accordion type="single" collapsible>
+                  <Accordion type="single" collapsible onValueChange={(value) => {
+                      if (value && !anime.info) {
+                        handleFetchInfo(anime.id, index);
+                      }
+                  }}>
                     <AccordionItem value={anime.id}>
                       <AccordionTrigger
                         className="p-4 hover:no-underline"
@@ -158,6 +155,7 @@ export default function AnimePage() {
                             width={100}
                             height={150}
                             className="rounded-md object-cover"
+                            unoptimized
                           />
                           <div className="text-left flex-grow">
                             <h3 className="font-bold text-lg">{typeof anime.title === 'string' ? anime.title : (anime.title as any).english || (anime.title as any).romaji}</h3>
