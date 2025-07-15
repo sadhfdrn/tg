@@ -7,20 +7,15 @@ const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
   const cookieApiUrl = process.env.COOKIE_API_URL;
-  // Check for both possible API key names for flexibility
-  const cookieApiKey = process.env.API_KEY || process.env.COOKIE_API_KEY;
 
-  if (!cookieApiUrl || !cookieApiKey) {
-    throw new Error('COOKIE_API_URL and either API_KEY or COOKIE_API_KEY environment variables must be set.');
+  if (!cookieApiUrl) {
+    throw new Error('COOKIE_API_URL environment variable must be set.');
   }
 
   const endpoint = `${cookieApiUrl}/api/cookies`;
 
   try {
     const response = await axios.get(endpoint, {
-      headers: {
-        'x-api-key': cookieApiKey,
-      },
       timeout: 15000, // 15-second timeout
     });
 
