@@ -5,24 +5,16 @@ let cachedCookies: Record<string, string> | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 
-// Create a dedicated axios instance for the cookie service
 const cookieClient = axios.create();
 
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
-  const cookieApiUrl = 'https://closed-jessi-neusersd-62ba5c33.koyeb.app';
-
-  if (!cookieApiUrl) {
-    throw new Error('COOKIE_API_URL environment variable must be set.');
-  }
-
-  const endpoint = `${cookieApiUrl}/api/cookies`;
+  const cookieApiUrl = 'https://closed-jessi-neusersd-62ba5c33.koyeb.app/api/cookies';
 
   try {
-    const response = await cookieClient.get(endpoint, {
-      timeout: 15000, // 15-second timeout
+    const response = await cookieClient.get(cookieApiUrl, {
+      timeout: 15000,
     });
     
-    // The successful response data is expected to contain the 'cookies' object.
     if (response.data && response.data.success && typeof response.data.cookies === 'object') {
       console.log('Successfully fetched new cookies.');
       return response.data.cookies;
@@ -61,17 +53,19 @@ export async function getCookies(): Promise<{ animepahe: string; pahewin: string
     throw new Error('Failed to fetch cookies. The response was empty.');
   }
   
-  const { animepahe, pahewin, kwik } = cachedCookies;
+  // The service might return 'kiwik' instead of 'kwik'
+  const { animepahe, pahewin, kwik, kiwik } = cachedCookies as any;
+  const kwikCookie = kwik || kiwik;
 
-  if (!animepahe || !pahewin || !kwik) {
-    cachedCookies = null; // Invalidate cache on partial success
+  if (!animepahe || !pahewin || !kwikCookie) {
+    cachedCookies = null;
     console.error('Missing cookies in response:', {
       hasAnimepahe: !!animepahe,
       hasPahewin: !!pahewin,
-      hasKwik: !!kwik
+      hasKwik: !!kwikCookie
     });
     throw new Error('One or more required cookies (animepahe, pahewin, kwik) are missing from the API response.');
   }
 
-  return { animepahe, pahewin, kwik };
+  return { animepahe, pahewin, kwik: kwikCookie };
 }

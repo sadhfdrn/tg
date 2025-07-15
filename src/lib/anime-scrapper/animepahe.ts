@@ -9,6 +9,7 @@ import {
   IAnimeEpisode,
   IEpisodeServer,
   MediaFormat,
+  SubOrSub,
 } from './models';
 import AnimeParser from './anime-parser';
 import Kwik from './kwik';
@@ -68,6 +69,8 @@ class AnimePahe extends AnimeParser {
     const animeInfo: IAnimeInfo = {
       id: id,
       title: '',
+      hasSub: true,
+      hasDub: true,
     };
 
     try {
@@ -131,6 +134,8 @@ class AnimePahe extends AnimeParser {
                 image: item.snapshot,
                 duration: item.duration,
                 url: `${this.baseUrl}/play/${id}/${item.session}`,
+                isDubbed: item.audio === 'eng',
+                isSubbed: item.audio === 'jpn'
               } as IAnimeEpisode)
           )
         );
@@ -213,6 +218,8 @@ class AnimePahe extends AnimeParser {
           image: item.snapshot,
           duration: item.duration,
           url: `${this.baseUrl}/play/${session}/${item.session}`,
+          isDubbed: item.audio === 'eng',
+          isSubbed: item.audio === 'jpn'
         })
       ),
     ] as IAnimeEpisode[];
