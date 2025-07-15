@@ -177,7 +177,6 @@ class AnimePahe extends AnimeParser {
       const cookies = await getCookies();
 
       for (const link of links) {
-        // Here we handle the pahe.win redirect
         const paheWinUrl = new URL(link.url);
         const paheWinRes = await this.client.get(paheWinUrl.href, { 
             headers: { 
@@ -185,10 +184,13 @@ class AnimePahe extends AnimeParser {
                 'Cookie': cookies.pahewin
             } 
         });
-        const $$ = load(paheWinRes.data);
-        const kwikUrl = $$('body > script').html()?.match(/"([^"]+)"/)?.[1];
 
-        if(!kwikUrl) throw new Error("Could not extract kwik url from pahe.win")
+        const $$ = load(paheWinRes.data);
+        const scriptContainingUrl = $$('body > script').html();
+        const unpacked = eval(scriptContainingUrl?.match(/eval\(function\(p,a,c,k,e,d\)(.|\n)*?{}\)\)/)?.[0] ?? '');
+        const kwikUrl = unpacked?.match(/https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/)?.[0]
+        
+        if(!kwikUrl) throw new Error("Could not extract kwik url from pahe.win");
         
         const res = await new Kwik().extract(new URL(kwikUrl));
         if (res.length > 0) {
