@@ -53,10 +53,19 @@ export async function getCookies(): Promise<{ animepahe: string; pahewin: string
     console.log('Using cached cookies.');
   }
 
+  if (!cachedCookies) {
+    throw new Error('Failed to fetch cookies. The response was empty.');
+  }
+  
   const { animepahe, pahewin, kwik } = cachedCookies;
 
   if (!animepahe || !pahewin || !kwik) {
-    cachedCookies = null;
+    cachedCookies = null; // Invalidate cache on partial success
+    console.error('Missing cookies in response:', {
+      hasAnimepahe: !!animepahe,
+      hasPahewin: !!pahewin,
+      hasKwik: !!kwik
+    });
     throw new Error('One or more required cookies (animepahe, pahewin, kwik) are missing from the API response.');
   }
 
