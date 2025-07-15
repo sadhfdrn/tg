@@ -5,6 +5,9 @@ let cachedCookies: Record<string, string> | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 
+// Create a dedicated axios instance for the cookie service
+const cookieClient = axios.create();
+
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
   const cookieApiUrl = process.env.COOKIE_API_URL;
 
@@ -15,10 +18,11 @@ async function fetchAndParseCookies(): Promise<Record<string, string>> {
   const endpoint = `${cookieApiUrl}/api/cookies`;
 
   try {
-    const response = await axios.get(endpoint, {
+    const response = await cookieClient.get(endpoint, {
       timeout: 15000, // 15-second timeout
     });
-
+    
+    // The successful response data is expected to contain the 'cookies' object.
     if (response.data && response.data.success && typeof response.data.cookies === 'object') {
       console.log('Successfully fetched new cookies.');
       return response.data.cookies;
