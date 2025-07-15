@@ -7,10 +7,11 @@ const CACHE_DURATION_MS = 25 * 60 * 1000; // 25 minutes
 
 async function fetchAndParseCookies(): Promise<Record<string, string>> {
   const cookieApiUrl = process.env.COOKIE_API_URL;
-  const cookieApiKey = process.env.API_KEY;
+  // Check for both possible API key names for flexibility
+  const cookieApiKey = process.env.API_KEY || process.env.COOKIE_API_KEY;
 
   if (!cookieApiUrl || !cookieApiKey) {
-    throw new Error('COOKIE_API_URL and API_KEY environment variables must be set.');
+    throw new Error('COOKIE_API_URL and either API_KEY or COOKIE_API_KEY environment variables must be set.');
   }
 
   const endpoint = `${cookieApiUrl}/api/cookies`;
@@ -33,6 +34,7 @@ async function fetchAndParseCookies(): Promise<Record<string, string>> {
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
         const errorData = error.response?.data;
+        // Extract the specific error message from the cookie service if available
         const serverErrorMessage = errorData?.error || JSON.stringify(errorData);
         console.error('Axios error fetching cookies from API:', {
             message: error.message,
