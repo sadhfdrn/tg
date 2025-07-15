@@ -162,8 +162,8 @@ class AnimeOwl extends AnimeParser {
       const { data } = await this.client.get(`${this.baseUrl}/anime/${animeSlug}`);
       const $ = load(data);
       
-      const subId = episodeIds.split('&')[0];
-      const dubId = episodeIds.split('&')[1];
+      const subId = episodeIds?.split('&')[0];
+      const dubId = episodeIds?.split('&')[1];
 
       const findUrl = (selector: string, id: string | undefined) => {
         if (!id) return null;
