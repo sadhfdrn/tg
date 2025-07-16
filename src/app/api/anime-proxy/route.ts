@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Pass through the original headers and add the Content-Disposition header.
     const responseHeaders = new Headers(response.headers);
     const filename = new URL(url).pathname.split('/').pop() || 'video.mp4';
     responseHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);

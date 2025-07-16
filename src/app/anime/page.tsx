@@ -25,7 +25,7 @@ export default function AnimePage() {
   const [searchResults, setSearchResults] = useState<ISearch<AnimeResultWithInfo> | null>(null);
   const [loading, setLoading] = useState(false);
   const [infoLoading, setInfoLoading] = useState<Record<string, boolean>>({});
-  const [sourceLoading, setSourceLoading] = useState<Record<string, boolean>>({});
+  const [sourceLoading, setSourceLoading] = useState<Record<string, string | null>>({});
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -63,7 +63,7 @@ export default function AnimePage() {
   };
 
   const handleDownload = async (episodeId: string, episodeTitle: string) => {
-    setSourceLoading(prev => ({ ...prev, [episodeId]: true }));
+    setSourceLoading(prev => ({ ...prev, [episodeId]: 'fetching' }));
     try {
       const sources = await getEpisodeSources(episodeId, provider);
       const source = sources.sources.find(s => s.quality === 'auto' || s.quality === 'default') || sources.sources[0];
@@ -72,36 +72,35 @@ export default function AnimePage() {
         throw new Error('No download source found.');
       }
       
+      setSourceLoading(prev => ({ ...prev, [episodeId]: 'downloading' }));
       toast({ title: 'Preparing Download', description: 'Your download will begin shortly...' });
-      
-      const response = await fetch(`/api/anime-proxy?url=${encodeURIComponent(source.url)}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Proxy error: ${response.status} - ${errorText}`);
-      }
 
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      
+      // Create a direct link to the proxy API endpoint
+      const proxyUrl = `/api/anime-proxy?url=${encodeURIComponent(source.url)}`;
+
       const link = document.createElement('a');
-      link.href = blobUrl;
-      const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_') || episodeId) + '.mp4';
+      link.href = proxyUrl;
+
+      // Clean the title to create a valid filename
+      const cleanTitle = (episodeTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase() || episodeId) + '.mp4';
       link.setAttribute('download', cleanTitle);
       
+      // Append the link, click it, and then remove it
       document.body.appendChild(link);
       link.click();
       
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
       
-      toast({ title: 'Success', description: 'Download started.' });
+      // Let the browser handle the download, so we don't need a "Download Started" toast,
+      // as the browser's download manager will provide feedback.
+      // We'll reset the button state after a short delay.
+      setTimeout(() => setSourceLoading(prev => ({ ...prev, [episodeId]: null })), 2000);
 
     } catch (error) {
       console.error(error);
       const errorMessage = (error instanceof Error) ? error.message : 'An unknown error occurred.';
       toast({ title: 'Error', description: `Failed to start download: ${errorMessage}`, variant: 'destructive' });
-    } finally {
-      setSourceLoading(prev => ({ ...prev, [episodeId]: false }));
+      setSourceLoading(prev => ({ ...prev, [episodeId]: null }));
     }
   };
 
@@ -179,7 +178,7 @@ export default function AnimePage() {
                                 {anime.info.episodes?.map(ep => (
                                   <li key={ep.id} className="flex justify-between items-center bg-muted/50 p-2 rounded-md">
                                     <span className="text-sm">{ep.title}</span>
-                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={sourceLoading[ep.id]}>
+                                    <Button size="sm" onClick={() => handleDownload(ep.id, ep.title || `episode_${ep.number}`)} disabled={!!sourceLoading[ep.id]}>
                                       {sourceLoading[ep.id] ? <Loader className="animate-spin" /> : <Download size={16} />}
                                     </Button>
                                   </li>
