@@ -1,29 +1,24 @@
 
-import { CheerioAPI, load } from 'cheerio';
-import {
-  ISearch,
-  IAnimeInfo,
-  IAnimeResult,
-  ISource,
-  IEpisodeServer,
+
+const { load } = require('cheerio');
+const {
   StreamingServers,
   MediaFormat,
   SubOrSub,
-  IAnimeEpisode,
   MediaStatus,
-} from './models';
-import AnimeParser from './anime-parser';
-import Luffy from './luffy';
-import axios from 'axios';
+} = require('./models');
+const AnimeParser = require('./anime-parser');
+const Luffy = require('./luffy');
+const axios = require('axios');
 
 class AnimeOwl extends AnimeParser {
-  override readonly name = 'AnimeOwl';
-  protected override baseUrl = 'https://animeowl.me';
-  protected apiUrl = 'https://animeowl.me/api';
-  protected override logo = 'https://animeowl.me/images/favicon-96x96.png';
-  protected override classPath = 'ANIME.AnimeOwl';
+  name = 'AnimeOwl';
+  baseUrl = 'https://animeowl.me';
+  apiUrl = 'https://animeowl.me/api';
+  logo = 'https://animeowl.me/images/favicon-96x96.png';
+  classPath = 'ANIME.AnimeOwl';
 
-  constructor(customBaseURL?: string) {
+  constructor(customBaseURL) {
     super();
     if (customBaseURL) {
       this.baseUrl = customBaseURL.startsWith('http') ? customBaseURL : `http://${customBaseURL}`;
@@ -31,7 +26,7 @@ class AnimeOwl extends AnimeParser {
     this.client = axios.create();
   }
 
-  override search = async (query: string, page: number = 1): Promise<ISearch<IAnimeResult>> => {
+  search = async (query, page = 1) => {
     const safePage = Math.max(1, page);
 
     const { data } = await this.client.post(`${this.apiUrl}/advance-search`, {
@@ -52,7 +47,7 @@ class AnimeOwl extends AnimeParser {
       hasNextPage: safePage < totalPages,
       totalPages: totalPages,
       results: data.results.map(
-        (item: any): IAnimeResult => ({
+        (item) => ({
           id: `${item.anime_slug}$${item.anime_id}`,
           title: item.en_name || item.anime_name,
           url: `${this.baseUrl}/anime/${item.anime_slug}`,
@@ -66,8 +61,8 @@ class AnimeOwl extends AnimeParser {
     };
   };
 
-  override fetchAnimeInfo = async (id: string): Promise<IAnimeInfo> => {
-    const info: IAnimeInfo = { id, title: '' };
+  fetchAnimeInfo = async (id) => {
+    const info = { id, title: '' };
     try {
       const animeSlug = id.split('$')[0];
       const { data } = await this.client.get(`${this.baseUrl}/anime/${animeSlug}`);
@@ -77,7 +72,7 @@ class AnimeOwl extends AnimeParser {
       info.japaneseTitle = $('h2.anime-romaji').text();
       info.image = `${this.baseUrl}${$('div.cover-img-container >img').attr('src')}`;
       info.description = $('div.anime-desc').text().replace(/\s*\n\s*/g, ' ').trim();
-      info.type = ($('div.type > a').text().toUpperCase() as MediaFormat) || MediaFormat.UNKNOWN;
+      info.type = ($('div.type > a').text().toUpperCase()) || MediaFormat.UNKNOWN;
       info.url = `${this.baseUrl}/anime/${animeSlug}`;
 
       info.hasSub = $('#anime-cover-sub-content .episode-node').length > 0;
@@ -100,7 +95,7 @@ class AnimeOwl extends AnimeParser {
 
       info.totalEpisodes = Math.max(subEpisodes.length, dubEpisodes.length, 0);
 
-      const groupedMap = new Map<number, IAnimeEpisode>();
+      const groupedMap = new Map();
       
       subEpisodes.forEach(sub => {
         groupedMap.set(sub.number, {
@@ -127,11 +122,11 @@ class AnimeOwl extends AnimeParser {
       return info;
     } catch (err) {
       console.error(`Failed to fetch anime info for ${id}:`, err);
-      throw new Error(`Could not fetch anime info. ${(err as Error).message}`);
+      throw new Error(`Could not fetch anime info. ${(err).message}`);
     }
   };
 
-  override fetchEpisodeSources = async (episodeId: string, server: StreamingServers = StreamingServers.Luffy): Promise<ISource> => {
+  fetchEpisodeSources = async (episodeId, server = StreamingServers.Luffy) => {
     if (episodeId.startsWith('http')) {
       return {
         headers: { Referer: episodeId },
@@ -152,7 +147,7 @@ class AnimeOwl extends AnimeParser {
     }
   };
   
-  override fetchEpisodeServers = async (episodeIdWithSlug: string): Promise<IEpisodeServer[]> => {
+  fetchEpisodeServers = async (episodeIdWithSlug) => {
     try {
       const parts = episodeIdWithSlug.split('$');
       const animeSlug = parts[0];
@@ -186,11 +181,11 @@ class AnimeOwl extends AnimeParser {
       return [{ name: 'luffy', url: serverUrl }];
     } catch (err) {
       console.error(`Failed to fetch episode servers for ${episodeIdWithSlug}:`, err);
-      throw new Error(`Could not fetch episode servers. ${(err as Error).message}`);
+      throw new Error(`Could not fetch episode servers. ${(err).message}`);
     }
   };
 
-  private parseEpisodes = ($: CheerioAPI, selector: string, subOrDub: SubOrSub): IAnimeEpisode[] => {
+  parseEpisodes = ($, selector, subOrDub) => {
     return $(selector).map((_, el) => {
         const $el = $(el);
         const title = $el.attr('title');
@@ -208,8 +203,8 @@ class AnimeOwl extends AnimeParser {
         };
       })
       .get()
-      .filter((v): v is IAnimeEpisode => v !== null);
+      .filter((v) => v !== null);
   };
 }
 
-export default AnimeOwl;
+module.exports = AnimeOwl;

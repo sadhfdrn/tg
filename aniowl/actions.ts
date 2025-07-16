@@ -1,38 +1,43 @@
 
 'use server';
 
-import AnimeOwl from './lib/animeowl';
-import { IAnimeInfo, IAnimeResult, ISearch, ISource } from './lib/models';
+const AnimeOwl = require('./lib/animeowl');
 
 const animeowl = new AnimeOwl();
 
-export async function searchAnime(query: string): Promise<ISearch<IAnimeResult>> {
+async function searchAnime(query) {
   try {
     const res = await animeowl.search(query);
     const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
     return { ...res, results: validResults };
   } catch (err) {
     console.error(`Error in searchAnime for provider animeowl:`, err);
-    throw new Error((err as Error).message || `Failed to search for anime on animeowl. Check server logs for details.`);
+    throw new Error((err).message || `Failed to search for anime on animeowl. Check server logs for details.`);
   }
 }
 
-export async function getAnimeInfo(id: string): Promise<IAnimeInfo> {
+async function getAnimeInfo(id) {
   try {
     const res = await animeowl.fetchAnimeInfo(id);
     return res;
   } catch (err) {
     console.error(`Error in getAnimeInfo for provider animeowl:`, err);
-    throw new Error((err as Error).message || `Failed to get anime info from animeowl. Check server logs for details.`);
+    throw new Error((err).message || `Failed to get anime info from animeowl. Check server logs for details.`);
   }
 }
 
-export async function getEpisodeSources(episodeId: string): Promise<ISource> {
+async function getEpisodeSources(episodeId) {
   try {
     const res = await animeowl.fetchEpisodeSources(episodeId);
     return res;
   } catch (err) {
     console.error(`Error in getEpisodeSources for provider animeowl:`, err);
-    throw new Error((err as Error).message || `Failed to get episode sources from animeowl. Check server logs for details.`);
+    throw new Error((err).message || `Failed to get episode sources from animeowl. Check server logs for details.`);
   }
 }
+
+module.exports = {
+    searchAnime,
+    getAnimeInfo,
+    getEpisodeSources
+};

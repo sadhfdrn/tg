@@ -1,28 +1,28 @@
 
-import { IVideo } from './models';
-import VideoExtractor from './video-extractor';
-import vm from 'node:vm';
-import axios from 'axios';
+
+const VideoExtractor = require('./video-extractor');
+const vm = require('node:vm');
+const axios = require('axios');
 
 class Luffy extends VideoExtractor {
-  protected override serverName = 'luffy';
-  protected override sources: IVideo[] = [];
+  serverName = 'luffy';
+  sources = [];
 
-  private readonly host = 'https://animeowl.me';
+  host = 'https://animeowl.me';
 
-  override extract = async (videoUrl: URL): Promise<IVideo[]> => {
+  extract = async (videoUrl) => {
     try {
-      const { data: server } = await this.client.get(videoUrl.href!);
+      const { data: server } = await this.client.get(videoUrl.href);
       const jwtRegex = /([A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)/;
       const { data: script } = await this.client.get(
-        `${this.host}/players/${videoUrl.href!.split('/').pop()}.v2.js`
+        `${this.host}/players/${videoUrl.href.split('/').pop()}.v2.js`
       );
       const c = await this.deobfuscateScript(script);
       if (!c) {
         throw new Error('Deobfuscation failed, returned null.');
       }
-      const jwt = jwtRegex.exec(c!)![0];
-      server['luffy']?.map((item: any) => {
+      const jwt = jwtRegex.exec(c)[0];
+      server['luffy']?.map((item) => {
         this.sources.push({
           quality: item.url.match(/[?&]resolution=([^&]+)/)?.[1],
           url: item.url + jwt,
@@ -31,15 +31,15 @@ class Luffy extends VideoExtractor {
 
       return this.sources;
     } catch (err) {
-      throw new Error((err as Error).message);
+      throw new Error((err).message);
     }
   };
 
-  private deobfuscateScript = async (source: string): Promise<string | null> => {
+  deobfuscateScript = async (source) => {
     const { data: synchronyScript } = await this.client.get(
       'https://raw.githubusercontent.com/Kohi-den/extensions-source/9328d12fcfca686becfb3068e9d0be95552c536f/lib/synchrony/src/main/assets/synchrony-v2.4.5.1.js'
     );
-    let synchronyScriptText = synchronyScript as string;
+    let synchronyScriptText = synchronyScript;
 
     const regex = /export\{(.*?) as Deobfuscator,(.*?) as Transformer\};/;
     const match = synchronyScriptText.match(regex);
@@ -67,4 +67,4 @@ class Luffy extends VideoExtractor {
     }
   };
 }
-export default Luffy;
+module.exports = Luffy;

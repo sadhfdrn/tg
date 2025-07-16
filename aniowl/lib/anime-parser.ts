@@ -1,37 +1,25 @@
 
-import { IAnimeInfo, ISource, IEpisodeServer, ISearch, IAnimeResult } from './models';
-import BaseParser from './base-parser';
-import { AxiosAdapter } from 'axios';
 
-abstract class AnimeParser extends BaseParser {
-  /**
-   * if the provider has dub and it's avialable seperatly from sub set this to `true`
-   */
-  protected readonly isDubAvailableSeparately: boolean = false;
-  /**
-   * takes anime id
-   *
-   * returns anime info (including episodes)
-   */
-  abstract fetchAnimeInfo(animeId: string, ...args: any): Promise<IAnimeInfo>;
+const BaseParser = require('./base-parser');
 
-  /**
-   * takes episode id
-   *
-   * returns episode sources (video links)
-   */
-  abstract fetchEpisodeSources(episodeId: string, ...args: any): Promise<ISource>;
+class AnimeParser extends BaseParser {
+  isDubAvailableSeparately = false;
+  
+  fetchAnimeInfo(animeId, ...args) {
+    throw new Error('Method not implemented.');
+  }
 
-  /**
-   * takes episode id
-   *
-   * returns episode servers (video links) available
-   */
-  abstract fetchEpisodeServers(episodeId: string, ...args: any): Promise<IEpisodeServer[]>;
+  fetchEpisodeSources(episodeId, ...args) {
+    throw new Error('Method not implemented.');
+  }
 
-  override search(query: string, ...args: any): Promise<ISearch<IAnimeResult>> {
+  fetchEpisodeServers(episodeId, ...args) {
+    throw new Error('Method not implemented.');
+  }
+
+  search(query, ...args) {
     throw new Error('Method not implemented.');
   }
 }
 
-export default AnimeParser;
+module.exports = AnimeParser;
