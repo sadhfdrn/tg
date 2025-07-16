@@ -3,14 +3,14 @@
   "name": "aniowl-scraper-test",
   "version": "1.0.0",
   "description": "Standalone test environment for the AnimeOwl scraper.",
-  "main": "test.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "node test.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.7.2",
-    "cheerio": "^1.0.0-rc.12"
+    "cheerio": "^1.0.0-rc.12",
+    "express": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^20.12.12"
