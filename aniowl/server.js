@@ -1,6 +1,6 @@
 
 const express = require('express');
-const { searchAnime, getAnimeInfo, getEpisodeSources } = require('./actions');
+const { searchAnime, getAnimeInfo, getEpisodeSources } = require('./actions.js');
 
 const app = express();
 const port = 3001;

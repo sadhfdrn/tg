@@ -1,70 +1,74 @@
+const express = require('express');
+const { searchAnime, getAnimeInfo, getEpisodeSources } = require('./actions.js');
 
+const app = express();
+const port = 3001;
 
-const VideoExtractor = require('./video-extractor');
-const vm = require('node:vm');
-const axios = require('axios');
+app.use(express.json());
 
-class Luffy extends VideoExtractor {
-  serverName = 'luffy';
-  sources = [];
+// Root endpoint with API description
+app.get('/anime', (req, res) => {
+    res.status(200).json({
+        message: 'Welcome to the AniOwl API!',
+        description: 'This API allows you to search for anime, get detailed information, and find episode streaming sources.',
+        endpoints: {
+            search: '/anime/search/:query',
+            info: '/anime/info/:animeId',
+            sources: '/anime/sources/:episodeId'
+        },
+        example: {
+            search: '/anime/search/dandadan',
+            info: '/anime/info/dandadan$18979',
+            sources: '/anime/sources/dandadan$225134'
+        }
+    });
+});
 
-  host = 'https://animeowl.me';
-
-  extract = async (videoUrl) => {
-    try {
-      const { data: server } = await this.client.get(videoUrl.href);
-      const jwtRegex = /([A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)/;
-      const { data: script } = await this.client.get(
-        `${this.host}/players/${videoUrl.href.split('/').pop()}.v2.js`
-      );
-      const c = await this.deobfuscateScript(script);
-      if (!c) {
-        throw new Error('Deobfuscation failed, returned null.');
-      }
-      const jwt = jwtRegex.exec(c)[0];
-      server['luffy']?.map((item) => {
-        this.sources.push({
-          quality: item.url.match(/[?&]resolution=([^&]+)/)?.[1],
-          url: item.url + jwt,
-        });
-      });
-
-      return this.sources;
-    } catch (err) {
-      throw new Error((err).message);
+// Search for an anime
+app.get('/anime/search/:query', async (req, res) => {
+    const { query } = req.params;
+    if (!query) {
+        return res.status(400).json({ error: 'Query parameter is required.' });
     }
-  };
-
-  deobfuscateScript = async (source) => {
-    const { data: synchronyScript } = await this.client.get(
-      'https://raw.githubusercontent.com/Kohi-den/extensions-source/9328d12fcfca686becfb3068e9d0be95552c536f/lib/synchrony/src/main/assets/synchrony-v2.4.5.1.js'
-    );
-    let synchronyScriptText = synchronyScript;
-
-    const regex = /export\{(.*?) as Deobfuscator,(.*?) as Transformer\};/;
-    const match = synchronyScriptText.match(regex);
-    if (!match) return null;
-
-    const [fullMatch, deob, trans] = match;
-    const replacement = `const Deobfuscator = ${deob}, Transformer = ${trans};`;
-    synchronyScriptText = synchronyScriptText.replace(fullMatch, replacement);
-
-    const context = {
-      source,
-      result: '',
-      console: { log: () => {}, warn: () => {}, error: () => {}, trace: () => {} },
-    };
-
-    vm.createContext(context);
-
     try {
-      vm.runInContext(synchronyScriptText, context);
-      context.result = vm.runInContext(`new Deobfuscator().deobfuscateSource(source)`, context);
-      return context.result;
-    } catch (err) {
-      console.error('Deobfuscation failed:', err);
-      return null;
+        const results = await searchAnime(query);
+        res.json(results);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
     }
-  };
-}
-module.exports = Luffy;
+});
+
+// Get anime info (details and episode list)
+app.get('/anime/info/:animeId', async (req, res) => {
+    const { animeId } = req.params;
+    if (!animeId) {
+        return res.status(400).json({ error: 'Anime ID parameter is required.' });
+    }
+    try {
+        const results = await getAnimeInfo(animeId);
+        res.json(results);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get episode streaming sources
+app.get('/anime/sources/:episodeId', async (req, res) => {
+    const { episodeId } = req.params;
+     if (!episodeId) {
+        return res.status(400).json({ error: 'Episode ID parameter is required.' });
+    }
+    try {
+        const results = await getEpisodeSources(episodeId);
+        res.json(results);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.listen(port, () => {
+    console.log(`AniOwl API server listening at http://localhost:${port}`);
+});

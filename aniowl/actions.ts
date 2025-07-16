@@ -1,43 +1,74 @@
+const express = require('express');
+const { searchAnime, getAnimeInfo, getEpisodeSources } = require('./actions.js');
 
-'use server';
+const app = express();
+const port = 3001;
 
-const AnimeOwl = require('./lib/animeowl');
+app.use(express.json());
 
-const animeowl = new AnimeOwl();
+// Root endpoint with API description
+app.get('/anime', (req, res) => {
+    res.status(200).json({
+        message: 'Welcome to the AniOwl API!',
+        description: 'This API allows you to search for anime, get detailed information, and find episode streaming sources.',
+        endpoints: {
+            search: '/anime/search/:query',
+            info: '/anime/info/:animeId',
+            sources: '/anime/sources/:episodeId'
+        },
+        example: {
+            search: '/anime/search/dandadan',
+            info: '/anime/info/dandadan$18979',
+            sources: '/anime/sources/dandadan$225134'
+        }
+    });
+});
 
-async function searchAnime(query) {
-  try {
-    const res = await animeowl.search(query);
-    const validResults = res.results.filter(item => item.image && (item.image.startsWith('http') || item.image.startsWith('https://')));
-    return { ...res, results: validResults };
-  } catch (err) {
-    console.error(`Error in searchAnime for provider animeowl:`, err);
-    throw new Error((err).message || `Failed to search for anime on animeowl. Check server logs for details.`);
-  }
-}
+// Search for an anime
+app.get('/anime/search/:query', async (req, res) => {
+    const { query } = req.params;
+    if (!query) {
+        return res.status(400).json({ error: 'Query parameter is required.' });
+    }
+    try {
+        const results = await searchAnime(query);
+        res.json(results);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
-async function getAnimeInfo(id) {
-  try {
-    const res = await animeowl.fetchAnimeInfo(id);
-    return res;
-  } catch (err) {
-    console.error(`Error in getAnimeInfo for provider animeowl:`, err);
-    throw new Error((err).message || `Failed to get anime info from animeowl. Check server logs for details.`);
-  }
-}
+// Get anime info (details and episode list)
+app.get('/anime/info/:animeId', async (req, res) => {
+    const { animeId } = req.params;
+    if (!animeId) {
+        return res.status(400).json({ error: 'Anime ID parameter is required.' });
+    }
+    try {
+        const results = await getAnimeInfo(animeId);
+        res.json(results);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
-async function getEpisodeSources(episodeId) {
-  try {
-    const res = await animeowl.fetchEpisodeSources(episodeId);
-    return res;
-  } catch (err) {
-    console.error(`Error in getEpisodeSources for provider animeowl:`, err);
-    throw new Error((err).message || `Failed to get episode sources from animeowl. Check server logs for details.`);
-  }
-}
+// Get episode streaming sources
+app.get('/anime/sources/:episodeId', async (req, res) => {
+    const { episodeId } = req.params;
+     if (!episodeId) {
+        return res.status(400).json({ error: 'Episode ID parameter is required.' });
+    }
+    try {
+        const results = await getEpisodeSources(episodeId);
+        res.json(results);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
-module.exports = {
-    searchAnime,
-    getAnimeInfo,
-    getEpisodeSources
-};
+app.listen(port, () => {
+    console.log(`AniOwl API server listening at http://localhost:${port}`);
+});
