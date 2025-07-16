@@ -26,30 +26,32 @@ async function runTest() {
         // Note: The getEpisodeSources function now requires a running proxy.
         // This test script will fail unless you start the local proxy server first.
         // Run `npm start` in a separate terminal before running `npm test`.
-
-        const localProxyUrl = `http://localhost:3001/api/anime-proxy`;
         
-        const servers = await getEpisodeSources(firstEpisode.id);
-        const sourceUrl = servers.sources[0]?.url;
+        const sources = await getEpisodeSources(firstEpisode.id);
+        const sourceUrl = sources.sources[0]?.url;
 
         if (!sourceUrl) {
             throw new Error("Could not get a source URL from the episode servers.");
         }
         
-        console.log("Episode source URL obtained. Now attempting to fetch via local proxy...");
-
-        const proxiedUrl = `${localProxyUrl}?url=${encodeURIComponent(sourceUrl)}`;
+        console.log("Episode source URL obtained. Attempting to fetch...");
         
-        const response = await fetch(proxiedUrl);
+        // This test doesn't use a local proxy, it fetches directly.
+        // The main app's proxy is at /api/anime-proxy and is handled by Next.js rewrites.
+        const response = await fetch(sourceUrl, {
+            headers: {
+                'Referer': 'https://animeowl.me/'
+            }
+        });
         
-        console.log(`Proxy Response Status: ${response.status}`);
+        console.log(`Direct Fetch Response Status: ${response.status}`);
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Failed to fetch from proxy. Status: ${response.status}. Body: ${errorText}`);
+            throw new Error(`Failed to fetch from source. Status: ${response.status}. Body: ${errorText}`);
         }
         
         const contentLength = response.headers.get('content-length');
-        console.log(`Successfully fetched from proxy. Content-Length: ${contentLength || 'Unknown'}`);
+        console.log(`Successfully fetched from source. Content-Length: ${contentLength || 'Unknown'}`);
         console.log("\n✅ All tests passed!");
 
     } catch (error) {
