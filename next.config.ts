@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/anime-proxy',
-        destination: 'https://luffy.animeowl.me/',
+        destination: 'https://monkey-d-luffy.site/v1/files',
       },
     ]
   },
